@@ -1,5 +1,6 @@
 # 示例外参与内参仅用于仿真。实机运行前请逐台替换并标记 calibration_verified。
 # ENU: x东/y北/z上（m）；安装姿态顺序 [roll,pitch,yaw]（deg），俯仰向上为正。
+# 注意：本文件是演示/仿真模板，不应直接 --arm；正式覆盖实机请使用 coverage_hardware_*.yaml。
 system:
   rate_hz: 10
   duration_s: 60
@@ -88,7 +89,7 @@ devices:
     port: 37260
     position_m: [0, -30, 2]
     mount_rpy_deg: [0, 25, 0]
-    calibration_verified: true  # 布尔值标记；仍需用实测控制点验收标定
+    calibration_verified: false  # 演示参数，禁止直接用于 --arm 实机闭环
     rtsp_url: rtsp://192.168.144.25:8554/main.264
     yaw_limits_deg: [-130, 130]
     pitch_limits_deg: [-85, 25]
