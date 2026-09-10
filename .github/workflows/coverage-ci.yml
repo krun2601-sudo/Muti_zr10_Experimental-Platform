@@ -1,0 +1,42 @@
+name: coverage-ci
+
+on:
+  push:
+    branches: [feature/coverage-benchmarks]
+  pull_request:
+    paths:
+      - 'zr10_cooperative_lab/**'
+      - '.github/workflows/coverage-ci.yml'
+
+jobs:
+  test-and-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        working-directory: zr10_cooperative_lab
+        run: python -m pip install -e '.[dev]'
+      - name: Pytest
+        working-directory: zr10_cooperative_lab
+        run: python -m pytest -q
+      - name: Validate strict coverage
+        working-directory: zr10_cooperative_lab
+        run: python -m zr10lab validate --config configs/coverage_smoke.yaml
+      - name: Run coverage smoke benchmark
+        working-directory: zr10_cooperative_lab
+        run: |
+          python experiments/run_coverage_benchmark.py --algorithms fs,ewp,cg,tvp,vgls,opt --scenario-configs configs/coverage_smoke.yaml --seeds 7 --mode sim --output coverage_ci_runs --fail-fast
+          python experiments/analyze_coverage_benchmark.py coverage_ci_runs --output coverage_ci_analysis --mc-samples 2000
+      - name: Upload coverage smoke results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-smoke-results
+          path: |
+            zr10_cooperative_lab/coverage_ci_runs
+            zr10_cooperative_lab/coverage_ci_analysis
+          if-no-files-found: warn
