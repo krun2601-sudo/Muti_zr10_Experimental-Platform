@@ -27,11 +27,7 @@ class Telemetry:
 
 @dataclass(frozen=True)
 class Detection:
-    """检测框必须已还原到原始视频分辨率，不是模型缩放后的坐标。
-
-    local_id 是本相机本帧标识，不代表跨相机身份。真值 ID 禁止放入此接口。
-    t 为曝光时间估计；received_t 用于记录管线延迟，不能混为曝光时刻。
-    """
+    """检测框必须已还原到原始视频分辨率，不是模型缩放后的坐标。"""
     device_id: str
     frame_id: int
     t: float
@@ -91,7 +87,7 @@ class Track:
     covariance: tuple[tuple[float, ...], ...]
     last_seen_t: float
     hits: int
-    status: str  # tentative / confirmed / coasting
+    status: str
     device_ids: tuple[str, ...] = ()
     class_id: int = 0
     measured: bool = True
@@ -99,11 +95,7 @@ class Track:
 
 @dataclass(frozen=True)
 class Action:
-    """本地云台坐标中的目标角；None 表示本周期不修改该参数。
-
-    parameters 承载已注册的相机参数，不允许借此直接调用任意 SDK 方法。
-    issued_t + ttl_s 形成动作租约；硬件不能持续执行已过时的速度指令。
-    """
+    """本地云台坐标中的目标角；None 表示本周期不修改该参数。"""
     device_id: str
     yaw_deg: float | None = None
     pitch_deg: float | None = None
@@ -116,6 +108,19 @@ class Action:
 
 
 @dataclass(frozen=True)
+class CoverageSnapshot:
+    """统一严格覆盖状态的只读快照；默认值保证旧测试/旧策略构造兼容。"""
+    problem_hash: str = ""
+    visited_mask: tuple[bool, ...] = ()
+    first_covered_times: tuple[float | None, ...] = ()
+    newly_covered_ids: tuple[int, ...] = ()
+    fraction: float = 0.0
+    instant_fraction: float = 0.0
+    complete: bool = False
+    completion_time_s: float | None = None
+
+
+@dataclass(frozen=True)
 class PolicyContext:
     t: float
     dt: float
@@ -125,12 +130,15 @@ class PolicyContext:
     rays: tuple[Ray, ...] = ()
     tracks: tuple[Track, ...] = ()
     metrics: dict[str, float] = field(default_factory=dict)
+    coverage: CoverageSnapshot = field(default_factory=CoverageSnapshot)
 
 
 @dataclass(frozen=True)
 class Decision:
     actions: dict[str, Action]
     diagnostics: dict[str, Any] = field(default_factory=dict)
+    done: bool = False
+    termination_reason: str = ""
 
 
 @dataclass(frozen=True)
