@@ -50,7 +50,15 @@ def main(argv=None):
             ActionValidator(cfg)
             for d in cfg.active_devices:
                 intrinsics_at_zoom(d,d.initial_zoom)
-            print(f"配置通过：{len(cfg.active_devices)} 台设备，{cfg.system.get('rate_hz',10)} Hz")
+            extra = ""
+            if cfg.policy.get("coverage", {}).get("enabled", False):
+                from .coverage import CoverageProblem
+                problem = CoverageProblem(cfg)
+                problem.assert_feasible()
+                extra = (f"，strict coverage cells={len(problem.cells_m)}，"
+                         f"viewpoints={sum(len(v) for v in problem.viewpoints_by_device.values())}，"
+                         f"problem_hash={problem.problem_hash[:12]}")
+            print(f"配置通过：{len(cfg.active_devices)} 台设备，{cfg.system.get('rate_hz',10)} Hz{extra}")
         elif args.command=="capabilities":
             from .actions import PARAMETERS
             from dataclasses import asdict
@@ -65,7 +73,6 @@ def main(argv=None):
             from .runtime import run_simulation,run_hardware
             show_ui = cfg.control_center.get("enabled", False) if args.ui is None else args.ui
             if args.duration is not None:
-                # 无界面实验仍要求正时长；界面允许 0 表示用户手动结束。
                 if args.duration != 0 or not show_ui:
                     cfg.system["duration_s"] = args.duration
             if args.seed is not None:
@@ -81,7 +88,9 @@ def main(argv=None):
             def progress(s):
                 if s["step"] % max(1,int(cfg.system.get("rate_hz",10)*5)) == 0:
                     m = s["metrics"]
-                    print(f"cycle={s['step']} tracks={len(s['tracks'])} measured={m['measured_track_count']} coverage={m['roi_cumulative_coverage']:.1%}",flush=True)
+                    coverage = m.get("coverage_fraction", m.get("roi_cumulative_coverage"))
+                    coverage_text = "n/a" if coverage is None else f"{coverage:.1%}"
+                    print(f"cycle={s['step']} tracks={len(s['tracks'])} measured={m.get('measured_track_count',0)} coverage={coverage_text}",flush=True)
             path = run_simulation(cfg,args.output,args.realtime,progress) if args.mode=="sim" else asyncio.run(run_hardware(cfg,args.output,args.arm,progress))
             print(f"实验记录：{path}")
             print(f'生成报告：python -m zr10lab analyze "{path}"')
