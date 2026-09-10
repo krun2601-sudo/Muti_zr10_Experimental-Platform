@@ -1,0 +1,20 @@
+# 总控制中心示例：继承你的设备坐标/IP/标定配置，界面与无界面模式使用同一套算法。
+extends: four_zr10.yaml
+
+control_center:
+  # 对 python -m zr10lab run 生效；--ui / --no-ui 可以覆盖这个开关。
+  enabled: true
+  open_browser: true
+  port: 0                    # 自动选择本机空闲端口，不需要交换机或防火墙开放网页端口。
+  video_enabled: false       # 预览开关不影响跟踪模式所需的图像采集与推理。
+  preview_fps: 6             # 限制预览编码/传输频率，不改变设备视频编码帧率。
+  heartbeat_timeout_s: 3     # 页面失去联系后暂停控制；重新打开页面需显式恢复。
+  frustum_range_m: 200       # 三维视锥显示截断距离，不是实测识别距离。
+  default_mode: manual
+  duration_s: 0              # 界面手动启动时 0 表示持续运行，由“结束实验”停止。
+  modes: []                  # 添加模式的例子见 docs/总控制中心.md。
+
+# 此示例允许手动绝对变焦。若实验只研究A/E，请保留基础配置原有的两维掩码。
+# 超出实测内参表范围的倍率不能用于可信视场显示与定位。
+action_space:
+  enabled: [yaw_deg, pitch_deg, zoom]

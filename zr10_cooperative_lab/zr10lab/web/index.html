@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>ZR10 · 协同观测控制中心</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%230d263b'/%3E%3Cpath d='M9 12h22L9 28h22' fill='none' stroke='%2352d6c2' stroke-width='4'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="importmap">{"imports":{"three":"/vendor/three.module.js"}}</script>
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand-mark" aria-hidden="true">Z<span>10</span></div>
+  <div class="brand"><strong>协同观测控制中心</strong><span>ZR10 COOPERATIVE LAB</span></div>
+  <div class="header-divider"></div>
+  <div class="session-status"><span id="status-dot" class="status-dot"></span><span id="status-text">正在连接服务</span></div>
+  <div class="header-right"><span id="source-badge" class="source-badge">等待数据</span><span id="server-status" class="server-status">本机服务 · 连接中</span><button class="icon-btn dark" id="help-button" title="使用说明" aria-label="使用说明">?</button></div>
+</header>
+
+<main>
+  <section class="experiment-toolbar" aria-label="实验控制">
+    <div class="toolbar-field"><label for="environment">运行环境</label><select id="environment"><option value="sim">仿真实验</option><option value="hardware">真实设备</option></select></div>
+    <div class="toolbar-field mode-field"><label for="mode">任务模式</label><select id="mode"><option value="manual">手动控制</option></select></div>
+    <div class="toolbar-field duration-field"><label for="duration">时长 / 秒</label><input id="duration" type="number" min="0" step="1" value="60" title="0 表示持续运行"></div>
+    <label id="armed-label" class="armed-label" hidden><input id="armed" type="checkbox">允许实机动作</label>
+    <div class="toolbar-spacer"></div>
+    <button id="start-button" class="btn primary"><span aria-hidden="true">▶</span> 开始实验</button>
+    <button id="pause-button" class="btn" disabled>Ⅱ 暂停</button>
+    <button id="stop-button" class="btn" disabled>■ 结束</button>
+    <button id="estop-button" class="btn danger">紧急停止</button>
+  </section>
+  <div class="mode-description"><span id="mode-description">选择任务模式，开始一次可记录、可回放分析的实验。</span><div class="inline-actions"><button id="probe-devices" class="text-btn" title="只读查询真实设备，实验停止时可用">检查设备连接</button><span class="muted">·</span><button id="reload-policy" class="text-btn">重新加载算法</button></div></div>
+  <div id="global-banner" class="banner" role="status" hidden></div>
+
+  <section class="summary-grid" aria-label="实验摘要">
+    <article class="summary-card"><span class="summary-label">设备在线</span><div><strong id="metric-devices">—</strong><span class="metric-unit" id="metric-device-total">/ — 台</span></div><span class="summary-foot" id="metric-devices-note">等待设备状态</span><span class="summary-symbol teal" aria-hidden="true">◉</span></article>
+    <article class="summary-card"><span class="summary-label">定位目标</span><div><strong id="metric-tracks">—</strong><span class="metric-unit">个</span></div><span class="summary-foot" id="metric-tracks-note">测量与预测分开显示</span><span class="summary-symbol blue" aria-hidden="true">⌖</span></article>
+    <article class="summary-card"><span class="summary-label">区域累计覆盖</span><div><strong id="metric-coverage">—</strong><span class="metric-unit">%</span></div><span class="summary-foot">几何采样覆盖 · 不等同识别概率</span><span class="summary-symbol violet" aria-hidden="true">▧</span></article>
+    <article class="summary-card"><span class="summary-label">本次实验</span><div><strong id="metric-time">00:00</strong><span class="metric-unit" id="metric-duration">/ 01:00</span></div><span class="summary-foot" id="metric-session">尚未开始记录</span><span class="summary-symbol amber" aria-hidden="true">◷</span></article>
+  </section>
+
+  <div class="workspace-grid">
+    <section class="panel scene-panel">
+      <div class="panel-heading"><div><span class="eyebrow">SPATIAL OBSERVATION</span><h2>三维观测空间 <span class="small-badge">ENU · 米</span></h2></div><div class="inline-actions"><button id="scene-settings-toggle" class="btn small" aria-expanded="false" aria-controls="scene-settings">范围设置</button><button id="scene-top" class="btn small">俯视</button><button id="scene-reset" class="btn small" title="适应当前显示范围，并恢复透视方向">复位</button><button id="scene-export" class="btn small" title="保存当前三维视图">导出图像</button></div></div>
+      <div class="scene-navigation">
+        <div class="scene-drag-modes" role="group" aria-label="左键拖动方式"><button id="scene-rotate" class="active" aria-pressed="true">旋转</button><button id="scene-pan" aria-pressed="false">平移</button></div>
+        <div class="scene-focus-tools" role="group" aria-label="三维聚焦范围"><span>聚焦</span><button class="btn small" data-scene-scope="devices">设备群</button><button class="btn small" data-scene-scope="selected">选中设备</button><button class="btn small" data-scene-scope="roi">观测区域</button><button class="btn small" data-scene-scope="all">全部</button></div>
+      </div>
+      <div id="scene-settings" class="scene-range-settings" hidden>
+        <form id="scene-space-form" class="scene-range-card">
+          <h3>坐标空间显示范围 <small>m</small></h3>
+          <label class="scene-scope-label">范围来源<select id="scene-space-source"><option value="devices">自动适应设备群</option><option value="selected">选中设备附近</option><option value="roi">观测区域</option><option value="all">设备、区域与视场</option><option value="custom">自定义 X/Y/Z</option></select></label>
+          <div class="scene-range-table"><span>坐标轴</span><span>最小值</span><span>最大值</span>
+            <label for="space-x-min">X 东</label><input id="space-x-min" type="number" step="any" required aria-label="显示范围 X 最小值"><input id="space-x-max" type="number" step="any" required aria-label="显示范围 X 最大值">
+            <label for="space-y-min">Y 北</label><input id="space-y-min" type="number" step="any" required aria-label="显示范围 Y 最小值"><input id="space-y-max" type="number" step="any" required aria-label="显示范围 Y 最大值">
+            <label for="space-z-min">Z 上</label><input id="space-z-min" type="number" step="any" required aria-label="显示范围 Z 最小值"><input id="space-z-max" type="number" step="any" required aria-label="显示范围 Z 最大值">
+          </div>
+          <p>调整坐标框与取景，实验运行中也可修改。超出坐标框的观测数据仍保留。</p>
+          <button class="btn small primary" type="submit">应用显示范围</button>
+        </form>
+        <form id="scene-roi-form" class="scene-range-card">
+          <h3>任务观测区域 ROI <small>m</small></h3>
+          <div class="scene-range-table"><span>坐标轴</span><span>最小值</span><span>最大值</span>
+            <label for="roi-x-min">X 东</label><input id="roi-x-min" type="number" step="any" required aria-label="观测区域 X 最小值"><input id="roi-x-max" type="number" step="any" required aria-label="观测区域 X 最大值">
+            <label for="roi-y-min">Y 北</label><input id="roi-y-min" type="number" step="any" required aria-label="观测区域 Y 最小值"><input id="roi-y-max" type="number" step="any" required aria-label="观测区域 Y 最大值">
+            <label for="roi-z-min">Z 上</label><input id="roi-z-min" type="number" step="any" required aria-label="观测区域 Z 最小值"><input id="roi-z-max" type="number" step="any" required aria-label="观测区域 Z 最大值">
+          </div>
+          <p id="scene-roi-note">结束实验后可修改。应用到任务配置；需要下次继续使用时，在“实验配置”中保存配置文件。</p>
+          <p id="scene-roi-scan-note" hidden>当前使用预定扫描点；修改 ROI 后原扫描点仍保留。按新区域生成网格时，请在算法配置将 scan_points_m 设为 null。</p>
+          <button id="scene-roi-apply" class="btn small primary" type="submit">应用观测区域</button>
+          <button id="scene-roi-reset" class="btn small" type="button">恢复当前配置</button>
+        </form>
+      </div>
+      <div id="scene-container" class="scene-container" aria-label="可旋转缩放的三维观测空间"><div id="scene-loading" class="scene-placeholder"><span class="loading-ring"></span><strong>正在构建观测空间</strong><span>所有设备与视场均由当前配置和反馈生成</span></div><div class="scene-coordinate">Z ↑ 上<span>X 东 · Y 北</span></div><div class="scene-instructions">左键旋转 · 右键平移 · 滚轮朝鼠标缩放 · 双击设置旋转中心</div><div id="scene-source-note" class="scene-source-note">等待姿态反馈</div>
+        <div class="scene-pan-pad" role="group" aria-label="视图平移和缩放"><button data-pan="0,1" class="pan-up" aria-label="视图向上平移" title="视图向上平移">↑</button><button data-pan="-1,0" class="pan-left" aria-label="视图向左平移" title="视图向左平移">←</button><button id="scene-zoom-in" class="pan-center" aria-label="放大三维视图" title="放大">＋</button><button data-pan="1,0" class="pan-right" aria-label="视图向右平移" title="视图向右平移">→</button><button data-pan="0,-1" class="pan-down" aria-label="视图向下平移" title="视图向下平移">↓</button><button id="scene-zoom-out" class="pan-out" aria-label="缩小三维视图" title="缩小">−</button></div>
+      </div>
+      <div class="scene-view-readout"><span id="scene-scope-note">显示范围：设备群</span><span id="scene-pivot-note">点击画布后可用方向键平移，Shift 加速</span></div>
+      <div class="scene-controls"><div class="checkbox-row"><label><input id="show-roi" type="checkbox" checked>区域边界</label><label><input id="show-frusta" type="checkbox" checked>观测视场</label><label><input id="show-trails" type="checkbox" checked>目标轨迹</label></div><label class="range-field">视场显示长度 <input id="frustum-range" type="number" min="1" max="10000" step="10" value="200"> m</label></div>
+      <div class="scene-footer"><div id="device-legend" class="device-legend"></div><span class="muted">显示截断距离，不代表识别距离</span></div>
+      <div class="scene-track-legend"><span><i class="track-key measured"></i>测量更新</span><span><i class="track-key predicted"></i>预测位置</span><span><i class="track-key preview"></i>虚线：配置预览</span><span id="scene-warning"></span></div>
+    </section>
+
+    <aside class="panel control-panel" aria-label="所选设备控制">
+      <div class="panel-heading"><div><span class="eyebrow">DEVICE CONTROL</span><h2>设备监控与控制</h2></div><button id="device-settings" class="text-btn">设备配置 ↗</button></div>
+      <div id="device-selector" class="device-selector" role="tablist" aria-label="选择设备"></div>
+      <div class="selected-device-line"><span><i id="selected-dot" class="status-dot"></i><strong id="selected-name">尚未选择设备</strong></span><span id="selected-status" class="small-badge">未连接</span></div>
+      <div id="selected-ip" class="device-address">—</div>
+      <div class="feedback-heading"><span>当前反馈</span><span id="feedback-source" class="small-badge">无数据</span></div>
+      <div class="feedback-grid"><div><span>方位 A</span><strong id="actual-yaw">—</strong><small>°</small></div><div><span>俯仰 E</span><strong id="actual-pitch">—</strong><small>°</small></div><div><span>光学倍率</span><strong id="actual-zoom">—</strong><small>×</small></div></div>
+      <div class="feedback-extra"><span>横滚 <b id="actual-roll">—</b>°</span><span>焦距 <b id="actual-focal">未知</b></span><span id="feedback-age">未收到反馈</span></div>
+      <div id="control-notice" class="control-notice">输入目标值并点击确定；留空的参数保持不变。</div>
+      <form id="manual-form">
+        <div class="form-heading">手动目标 <span id="ownership-badge" class="small-badge">待机</span><button type="button" id="copy-feedback" class="text-btn">填入当前角度</button></div>
+        <div class="manual-grid"><label>方位 A / °<input id="target-yaw" type="number" step="0.1" placeholder="不修改"></label><label>俯仰 E / °<input id="target-pitch" type="number" step="0.1" placeholder="不修改"></label><label>倍率 / ×<input id="target-zoom" type="number" step="0.1" placeholder="不修改"></label></div>
+        <div id="limit-hint" class="field-hint">动作受设备限位、能力和动作掩码约束。</div>
+        <details id="advanced-parameters"><summary>相机与高级参数 <span id="parameter-count"></span></summary><div id="parameter-fields" class="parameter-fields"></div><p class="field-hint">未选择的参数不发送。持续聚焦 / 变焦受动作租约限制；拍照、录像切换等仅执行一次。</p></details>
+        <button id="manual-submit" class="btn primary full-width" type="submit">确定 · 发送目标</button>
+      </form>
+      <div class="device-actions"><button id="initialize-device" class="btn small" title="移动至配置中的初始角度与倍率，不是设备重启">初始化</button><button id="connect-device" class="btn small">连接</button><button id="stop-device" class="btn small">停止本台</button><button id="release-device" class="btn small">交回算法</button></div>
+      <div class="last-command"><span>最近命令</span><span id="last-command">暂无指令</span></div>
+      <div id="target-summary" class="field-hint">目标命令与实际反馈独立显示。</div>
+    </aside>
+  </div>
+
+  <section class="panel video-panel">
+    <div class="panel-heading"><div><span class="eyebrow">LIVE STREAMS</span><h2>视频与识别 <span id="video-status" class="small-badge">预览已关闭</span></h2></div><label class="switch-label"><span>视频预览</span><input id="video-enabled" type="checkbox" role="switch"><span class="switch-track"></span></label></div>
+    <div id="video-grid" class="video-grid"></div>
+    <div class="panel-note">预览开关仅控制界面图像获取；跟踪任务需要的检测管线由任务模式决定。仿真图像会明确标注来源。</div>
+  </section>
+
+  <section class="panel details-panel">
+    <div class="detail-tabs" role="tablist" aria-label="实验详情"><button class="active" data-tab="telemetry" role="tab" aria-selected="true">设备遥测</button><button data-tab="tracks" role="tab" aria-selected="false">定位与轨迹 <span id="track-count">0</span></button><button data-tab="events" role="tab" aria-selected="false">事件日志 <span id="event-count">0</span></button><button data-tab="configuration" role="tab" aria-selected="false">实验配置</button><button data-tab="help" role="tab" aria-selected="false">使用说明</button><span class="detail-tabs-spacer"></span><span id="last-updated" class="muted">等待刷新</span></div>
+    <div id="tab-telemetry" class="tab-content active"><div class="table-scroll"><table><thead><tr><th>设备</th><th>连接 / 控制权</th><th>实测 A / E</th><th>目标 A / E</th><th>倍率</th><th>位置 ENU / m</th><th>视场 H × V</th><th>反馈来源</th><th>指令状态</th></tr></thead><tbody id="telemetry-body"></tbody></table></div><div class="panel-note">A / E 为已按配置换算的本地云台方位 / 俯仰，不等于全局 ENU 方位。离线数据不代表当前姿态。</div></div>
+    <div id="tab-tracks" class="tab-content"><div class="table-scroll"><table><thead><tr><th>目标 ID</th><th>状态</th><th>更新类型</th><th>X 东 / m</th><th>Y 北 / m</th><th>Z 上 / m</th><th>速度 / m·s⁻¹</th><th>观测设备</th></tr></thead><tbody id="tracks-body"></tbody></table></div><div class="panel-note">实心标记表示本周期有定位测量更新；预测不能替代持续双站观测。没有真值时不显示绝对定位误差。</div><div id="metrics-extra" class="metrics-extra"></div></div>
+    <div id="tab-events" class="tab-content"><div class="event-toolbar"><label>筛选 <select id="event-filter"><option value="all">全部事件</option><option value="error">异常与拒绝</option><option value="control">控制与模式</option></select></label><span class="muted">界面保留最近事件，完整过程数据以实验目录记录为准。</span></div><div id="events-list" class="events-list"></div></div>
+    <div id="tab-configuration" class="tab-content configuration-tab">
+      <div class="config-toolbar"><div><h3>配置与算法接口</h3><p>停止实验后修改；应用进入内存，保存写入配置文件。未知字段在编辑时保留。</p></div><div class="inline-actions"><button id="config-refresh" class="btn small">重新读取</button><button id="config-save" class="btn small">保存配置文件</button></div></div>
+      <div id="config-lock-note" class="banner subtle" hidden>实验运行中，站点位置、标定和算法配置已锁定。请先结束实验再编辑。</div>
+      <div class="config-layout"><nav class="config-nav"><button class="active" data-config-tab="device">设备与标定</button><button data-config-tab="policy">算法与动作空间</button><button data-config-tab="json">完整配置 JSON</button></nav><div class="config-content">
+        <form id="device-config-form" class="config-section active" data-config-panel="device"><div class="config-device-row"><label>编辑设备<select id="config-device"></select></label><label class="check-inline"><input id="cfg-enabled" type="checkbox">参与实验</label><label class="check-inline"><input id="cfg-calibrated" type="checkbox">已完成实机标定</label></div><div class="config-fields"><label>设备 IP<input id="cfg-ip" type="text" autocomplete="off"></label><label>UDP 端口<input id="cfg-port" type="number" min="1" max="65535"></label><label class="span-two">RTSP 视频地址<input id="cfg-rtsp" type="text" autocomplete="off"></label><fieldset class="span-two"><legend>站点位置 ENU / m</legend><div class="triple-fields"><label>X 东<input id="cfg-x" type="number" step="any"></label><label>Y 北<input id="cfg-y" type="number" step="any"></label><label>Z 上<input id="cfg-z" type="number" step="any"></label></div></fieldset><fieldset class="span-two"><legend>安装姿态 / °</legend><div class="triple-fields"><label>横滚 Roll<input id="cfg-mount-roll" type="number" step="any"></label><label>俯仰 Pitch<input id="cfg-mount-pitch" type="number" step="any"></label><label>偏航 Yaw<input id="cfg-mount-yaw" type="number" step="any"></label></div></fieldset><fieldset class="span-two"><legend>初始化目标（不会立即执行）</legend><div class="triple-fields"><label>方位 A / °<input id="cfg-init-yaw" type="number" step="any"></label><label>俯仰 E / °<input id="cfg-init-pitch" type="number" step="any"></label><label>倍率 / ×<input id="cfg-init-zoom" type="number" step="any"></label></div></fieldset><label>方位限位 [最小, 最大]<input id="cfg-yaw-limits" type="text" placeholder="[-130, 130]"></label><label>俯仰限位 [最小, 最大]<input id="cfg-pitch-limits" type="text" placeholder="[-85, 25]"></label><label>倍率范围 [最小, 最大]<input id="cfg-zoom-limits" type="text" placeholder="[1, 10]"></label><label>最大转速 / °·s⁻¹<input id="cfg-max-slew" type="number" step="any" min="0.01"></label><label class="span-two">控制器参数 control / JSON<textarea id="cfg-control" rows="7" spellcheck="false"></textarea></label><label class="span-two">相机内参、焦距映射与时延 camera / JSON<textarea id="cfg-camera" rows="9" spellcheck="false"></textarea></label><label class="span-two">设备能力 capabilities / JSON<textarea id="cfg-capabilities" rows="4" spellcheck="false"></textarea></label></div><p class="field-hint">位置是人工测量输入；勾选“已完成实机标定”不会执行标定。焦距毫米值需要实测焦距—倍率表。</p><button class="btn primary" type="submit">应用该设备配置</button></form>
+        <form id="policy-config-form" class="config-section" data-config-panel="policy"><label class="wide-label">算法配置 policy / JSON<textarea id="cfg-policy" rows="14" spellcheck="false"></textarea></label><div class="form-heading">算法动作空间</div><div id="action-mask-fields" class="action-mask-fields"></div><label class="wide-label">控制中心与自定义模式 control_center / JSON<textarea id="cfg-center" rows="9" spellcheck="false"></textarea></label><p class="field-hint">开放动作维度仍需设备支持及对应标定。新增模式在 control_center.modes 注册；算法实现修改后点击“重新加载算法”。</p><button class="btn primary" type="submit">应用算法与动作空间</button></form>
+        <form id="full-config-form" class="config-section" data-config-panel="json"><label class="wide-label">完整配置 / JSON<textarea id="cfg-full" class="full-json" rows="25" spellcheck="false"></textarea></label><p class="field-hint">用于编辑 ROI、检测模型、融合门限、日志、仿真目标和所有扩展字段。路径由服务端按项目配置规则解析。</p><button class="btn primary" type="submit">校验并应用完整配置</button></form>
+      </div></div>
+    </div>
+    <div id="tab-help" class="tab-content help-tab"><div><h3>从一次仿真实验开始</h3><ol><li>选择“仿真实验”和任务模式，点击“开始实验”。</li><li>在三维空间查看站点、视场和定位轨迹；点选设备打开对应控制面板。</li><li>输入目标 A / E 后点击“确定”，该台设备交由手动控制；“交回算法”后恢复自动分工。</li><li>结束实验后，在配置页修改坐标、算法参数或动作空间，再开始下一次实验。</li></ol></div><div><h3>真实设备与反馈</h3><p>真实设备模式读取实际姿态反馈。位置、安装姿态及相机内参来自配置；未标定、过期或未知倍率不会显示为有效实机视场。</p><p>先检查网络和每台设备的坐标、方向、限位及模型。允许实机动作后方可启动。初始化表示移动至配置中的初始姿态与倍率，不是重启设备。</p><p>紧急停止会锁住后续运动指令。解除后当前实验仍保持暂停，需点击“继续”，或结束后重新开始。关闭界面或心跳中断会暂停控制；恢复连接不会自动恢复实验。</p></div><div><h3>模式与数据边界</h3><p>覆盖扫描：执行扫描算法。目标居中跟踪：基于单相机检测误差跟踪。跟踪定位：结合至少两站观测形成空间测量。多目标定位允许离轴目标共享视场。</p><p>三维图的视场长度只是显示截断值，不代表识别距离或测距。虚线配置预览不是实测姿态，预测轨迹不是新的定位测量。</p><p>全部页面资源在本机加载。视频可全局及逐台关闭；实验 CSV 与元数据仍由后端独立记录。</p></div></div>
+  </section>
+  <footer class="page-footer"><span>ZR10 LAB <span class="footer-dot">·</span> 本地实验控制中心</span><span id="recording-path">数据记录将在开始后启用</span><span>ENU 坐标 · 角度 ° · 距离 m</span></footer>
+</main>
+<div id="toast-container" class="toast-container" aria-live="polite"></div>
+<dialog id="reset-dialog"><form method="dialog"><h3>设备已进入急停状态</h3><p>解除急停不会自动恢复运动。当前实验若仍处于暂停状态，请点击“继续”；也可结束后重新开始。</p><div class="inline-actions"><button class="btn" value="cancel">保持急停</button><button class="btn primary" id="reset-estop" value="default">解除急停</button></div></form></dialog>
+</body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "source": "https://github.com/mzahana/siyi_sdk/tree/siyi-sdk-v2",
+  "sdk_version": "0.6.0",
+  "retrieved_utc_date": "2026-09-06",
+  "upstream_archive_sha256": "db0687ac3852166af4fb442c86ce5fe56cdf55592360115c15c5e9836078e180",
+  "bundled_snapshot_sha256": "ba6c1d7361901b210fa4c28997ad928d347016d77259f9e066c5ed8497f29973",
+  "license": "MIT (included in snapshot)",
+  "note": "固定所核验的源码快照，以哈希标识；运行时不自动更新到分支最新版本。"
+}

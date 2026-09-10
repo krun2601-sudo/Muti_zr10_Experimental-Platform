@@ -1,0 +1,20 @@
+# 固定发布验收的 center 场景补丁；只继承同目录基准，不读取 configs/ 中的现场配置。
+extends: release_base.yaml
+policy:
+  mode: center
+simulation:
+  targets:
+  - id: uav_1
+    position_m:
+    - 110
+    - 0
+    - 65
+    amplitude_m:
+    - 8
+    - 25
+    - 8
+    period_s: 40
+    phase_rad:
+    - 0
+    - 1.5707963
+    - 0.4

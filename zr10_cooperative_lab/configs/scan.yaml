@@ -1,0 +1,3 @@
+extends: four_zr10.yaml
+policy: {name: scan}
+simulation: {targets: []}

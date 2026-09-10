@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zr10-cooperative-lab"
+version = "4.0.0"
+description = "ZR10 multi-agent cooperative observation laboratory"
+readme = "README_v4.md"
+requires-python = ">=3.10"
+# 几何投影、去畸变与标定同样使用 cv2，仿真安装也必须具备 OpenCV。
+# 统一使用 GUI 发行包，避免安装 vision 后与 headless 争用同一个 cv2 命名空间。
+dependencies = ["numpy>=1.24,<3", "scipy>=1.10,<2", "PyYAML>=6,<7", "opencv-python>=4.8,<6"]
+
+[project.optional-dependencies]
+vision = ["ultralytics>=8.2,<9"]
+onnx = ["onnxruntime>=1.17,<2"]
+analysis = ["matplotlib>=3.7,<4"]
+learning = ["gymnasium>=1.0,<2"]
+dev = ["pytest>=8,<10", "gymnasium>=1.0,<2"]
+
+[project.scripts]
+zr10lab = "zr10lab.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["zr10lab*"]
+
+[tool.setuptools.package-data]
+# 静态界面和三维资源必须随 wheel/sdist 安装，不能只在源码目录可用。
+zr10lab = ["web/*.html", "web/*.js", "web/*.css", "web/*.svg", "web/vendor/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

@@ -1,0 +1,47 @@
+# ZR10 协同观测实验平台：完整功能与开发依赖
+# 请在本文件所在的项目根目录执行：
+# .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+# 本清单列出直接依赖；pip 会自动安装各依赖所需的间接依赖。
+# v4 总控制中心使用 Python 标准库 HTTP 服务和项目自带 Three.js，
+# 不需要安装 PyQt/PySide、Web 框架、Node.js 或 npm。
+# 版本范围与 pyproject.toml 保持一致；本文件不是固定全部版本的锁定文件。
+
+# 数值计算、优化求解和 YAML 配置。
+numpy>=1.24,<3
+scipy>=1.10,<2
+PyYAML>=6,<7
+
+# 几何投影、标定、图像处理、视频读取和可视化窗口均使用 cv2。
+# 安装名为 opencv-python，代码中导入名为 cv2。
+# 请勿同时安装 opencv-python-headless 或其他提供 cv2 的发行包。
+opencv-python>=4.8,<6
+
+# 分析报告与轨迹绘图。
+matplotlib>=3.7,<4
+
+# YOLO 检测器；pip 会根据其依赖声明安装 torch、torchvision 等。
+# 无人机检测模型权重需自行提供，在项目配置中设置权重路径。
+ultralytics>=8.2,<9
+
+# ONNX Runtime 扩展依赖，对应项目的 onnx 可选依赖组。
+# 当前内置 ONNXDetector 使用 OpenCV DNN，不依赖此包；
+# 完整清单保留它，供后续接入 ONNX Runtime 推理后端使用。
+onnxruntime>=1.17,<2
+
+# 强化学习环境接口和自动化测试。
+gymnasium>=1.0,<2
+pytest>=8,<10
+
+# SIYI SDK v2 固定快照（0.6.0），包含在项目 vendor 目录中。
+# pip 可直接安装 ZIP，无需手动解压或另外安装 Git。
+# SDK 的 structlog、pyserial-asyncio、typing-extensions 等由 pip 自动安装。
+./vendor/siyi_sdk_v2_snapshot.zip
+
+# 以可编辑方式安装平台本身，便于修改源码后直接使用 zr10lab 命令。
+-e .
+
+# 可选：只有使用 pandas 自行编写 CSV 分析脚本时，才需要取消下一行注释。
+# pandas>=2.0,<4
+
+# tkinter、csv、asyncio、pathlib 等属于 Python 标准库，不应通过 pip 安装。
+# Tk 监控窗口需要 Python 安装中包含 Tcl/Tk 支持。

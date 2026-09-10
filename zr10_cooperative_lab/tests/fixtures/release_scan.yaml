@@ -1,0 +1,6 @@
+# 固定发布验收的 scan 场景补丁；只继承同目录基准，不读取 configs/ 中的现场配置。
+extends: release_base.yaml
+policy:
+  name: scan
+simulation:
+  targets: []

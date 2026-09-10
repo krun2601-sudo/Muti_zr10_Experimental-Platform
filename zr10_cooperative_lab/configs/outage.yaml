@@ -1,0 +1,5 @@
+extends: four_zr10.yaml
+simulation:
+  outages:
+    - {device_id: zr10_25, start_s: 10, end_s: 18}
+    - {device_id: zr10_26, start_s: 12, end_s: 16}

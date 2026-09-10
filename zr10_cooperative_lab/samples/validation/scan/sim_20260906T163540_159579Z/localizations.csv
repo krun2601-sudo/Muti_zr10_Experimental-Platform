@@ -1,0 +1,1 @@
+﻿schema_version,run_id,utc,t_s,localization_id,measurement_t,x_m,y_m,z_m,device_ids_json,detection_ids_json,residual_m,min_angle_deg,condition_number,time_span_s,covariance_json

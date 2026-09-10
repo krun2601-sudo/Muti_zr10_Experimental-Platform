@@ -1,0 +1,28 @@
+{
+  "run_id": "sim_20260906T163256_355662Z",
+  "mode": "sim",
+  "completed": true,
+  "cycles": 250,
+  "duration_s": 25.000000000000085,
+  "cycle_ms_p50": 16.005649988073856,
+  "cycle_ms_p95": 23.431719979271293,
+  "cycle_ms_max": 27.09710004273802,
+  "deadline_misses": 0,
+  "localizations": 496,
+  "track_ids": 2,
+  "command_errors": 0,
+  "final_metrics": {
+    "roi_instant_coverage": 0.736,
+    "roi_cumulative_coverage": 0.944,
+    "roi_multiview_fraction": 0.664,
+    "measured_track_count": 2,
+    "predicted_track_count": 0,
+    "localization_recall": 1.0,
+    "cumulative_localization_recall": 0.992,
+    "position_rmse_m": 0.08257581150464069,
+    "evaluation_match_count": 496,
+    "id_switches": 0,
+    "longest_localization_gap_s": 0.1999999999999993,
+    "truth_count": 2
+  }
+}

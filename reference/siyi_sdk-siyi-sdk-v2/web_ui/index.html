@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIYI SDK Web UI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div id="offline-overlay" class="offline-overlay">
+        <div class="overlay-content">
+            <i class="fas fa-sync fa-spin fa-3x" style="color: var(--accent-color); margin-bottom: 20px;"></i>
+            <h2 id="overlay-title">CAMERA OFFLINE</h2>
+            <p id="overlay-msg">Waiting for connection to be restored...</p>
+        </div>
+    </div>
+    <header>
+        <div class="logo">SIYI COMMAND</div>
+        <div class="status-bar">
+            <div class="status-item">
+                <span id="connection-indicator" class="indicator online"></span>
+                <span id="camera-status">CONNECTED</span>
+            </div>
+            <div class="status-item">
+                <i class="fas fa-microchip"></i>
+                <span id="camera-ip-display">192.168.144.25</span>
+            </div>
+            <div class="status-item" style="border-left: 1px solid var(--glass-border); padding-left: 15px;">
+                <input type="checkbox" id="config-live-view-toggle" checked style="width: auto; cursor: pointer;">
+                <label for="config-live-view-toggle" style="font-size: 0.8rem; cursor: pointer;">Live View</label>
+            </div>
+            <button class="btn" id="theme-toggle-btn" title="Toggle Theme" style="padding: 8px 12px;">
+                <i class="fas fa-moon"></i>
+            </button>
+            <button class="btn" id="open-config-btn" title="Configuration" style="padding: 8px 12px;">
+                <i class="fas fa-cog"></i>
+            </button>
+        </div>
+    </header>
+
+    <main>
+        <div class="viewport-section">
+            <div class="video-container">
+                <img id="video-stream" src="/api/stream/video" alt="Video Stream">
+                <div class="video-overlay">
+                    <div class="overlay-card">
+                        Y: <span id="att-yaw">0.0</span>° | P: <span id="att-pitch">0.0</span>° | R: <span id="att-roll">0.0</span>°
+                    </div>
+                    <div id="recording-badge" class="overlay-card" style="display: none; color: var(--danger);">
+                        <i class="fas fa-circle"></i> REC
+                    </div>
+                </div>
+            </div>
+
+            <section class="media-section">
+                <div class="control-card">
+                    <div class="modal-header">
+                        <h3>Media Browser</h3>
+                        <div class="tabs">
+                            <button class="btn btn-sm active" id="media-tab-img"><i class="fas fa-image"></i> Photos</button>
+                            <button class="btn btn-sm" id="media-tab-vid"><i class="fas fa-film"></i> Videos</button>
+                        </div>
+                        <button class="btn" id="refresh-media-btn"><i class="fas fa-sync"></i></button>
+                    </div>
+                    <div id="media-path-breadcrumb" style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 10px;">
+                        /root/photo
+                    </div>
+                    <div class="media-grid" id="media-grid">
+                        <!-- Media items will be injected here -->
+                        <div class="media-card">
+                            <div class="media-thumb"><i class="fas fa-spinner fa-spin"></i></div>
+                            <div class="media-info">
+                                <div class="media-name">Loading media...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <aside class="control-panel">
+            <div class="control-card">
+                <h3>Gimbal Control</h3>
+                <div class="joystick-container">
+                    <div id="joystick-zone" class="virtual-joystick">
+                        <div id="joystick-handle" class="joystick-handle"></div>
+                    </div>
+                </div>
+                <div class="grid-controls">
+                    <button class="btn" id="center-btn"><i class="fas fa-compress-arrows-alt"></i> Center</button>
+                    <button class="btn" id="lock-btn"><i class="fas fa-lock"></i> Lock</button>
+                </div>
+            </div>
+
+            <div class="control-card">
+                <h3>Camera Actions</h3>
+                <div class="grid-controls">
+                    <button class="btn btn-primary" id="photo-btn"><i class="fas fa-camera"></i> Photo</button>
+                    <button class="btn" id="record-btn"><i class="fas fa-video"></i> Record</button>
+                    <button class="btn" id="zoom-in-btn"><i class="fas fa-search-plus"></i> Zoom +</button>
+                    <button class="btn" id="zoom-out-btn"><i class="fas fa-search-minus"></i> Zoom -</button>
+                    <button class="btn" id="focus-near-btn"><i class="fas fa-eye"></i> Focus Near</button>
+                    <button class="btn" id="focus-far-btn"><i class="fas fa-eye-slash"></i> Focus Far</button>
+                </div>
+            </div>
+
+            <div class="control-card">
+                <h3>System Info</h3>
+                <div id="encoding-info" style="font-size: 0.85rem; line-height: 1.6;">
+                    <p>Camera: <span id="info-camera-type">---</span></p>
+                    <p>Camera FW: <span id="info-camera-fw">---</span></p>
+                    <p>Gimbal FW: <span id="info-gimbal-fw">---</span></p>
+                    <p style="margin-top: 8px; border-top: 1px solid var(--glass-border); padding-top: 8px;">Resolution: <span id="info-resolution">---</span></p>
+                    <p>Bitrate: <span id="info-bitrate">---</span></p>
+                    <p>FPS: <span id="info-fps">---</span></p>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- Config Modal -->
+    <div id="config-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Configuration</h2>
+                <button class="btn" id="close-config-btn"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="input-group">
+                <label>Camera IP Address</label>
+                <input type="text" id="config-ip-input" placeholder="192.168.144.25">
+            </div>
+            <div class="input-group">
+                <label>Encoding Resolution</label>
+                <select id="config-res-select">
+                    <option value="1920x1080">1080P</option>
+                    <option value="1280x720">720P</option>
+                </select>
+            </div>
+            
+            <div style="border-top: 1px solid var(--glass-border); margin: 25px 0 15px; padding-top: 20px;">
+                <label style="color: var(--danger); font-size: 0.7rem; font-weight: 700; display: block; margin-bottom: 12px; letter-spacing: 1px;">DANGER ZONE</label>
+                <div class="grid-controls" style="margin-bottom: 10px;">
+                    <button class="btn btn-danger" id="reboot-camera-btn" style="font-size: 0.7rem; padding: 10px;">
+                        <i class="fas fa-power-off"></i> Reboot Cam
+                    </button>
+                    <button class="btn btn-danger" id="reboot-gimbal-btn" style="font-size: 0.7rem; padding: 10px;">
+                        <i class="fas fa-sync-alt"></i> Reboot Gimbal
+                    </button>
+                </div>
+                <button class="btn btn-danger" style="width: 100%; font-size: 0.8rem;" id="format-sd-btn">
+                    <i class="fas fa-trash-alt"></i> Format SD Card
+                </button>
+            </div>
+            
+            <div style="margin-top: 25px;">
+                <button class="btn btn-primary" style="width: 100%" id="save-config-btn">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

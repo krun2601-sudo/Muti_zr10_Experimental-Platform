@@ -1,0 +1,9 @@
+extends: four_zr10.yaml
+policy: {mode: center}
+simulation:
+  targets:
+    - id: uav_1
+      position_m: [110, 0, 65]
+      amplitude_m: [8, 25, 8]
+      period_s: 40
+      phase_rad: [0, 1.5707963, 0.4]

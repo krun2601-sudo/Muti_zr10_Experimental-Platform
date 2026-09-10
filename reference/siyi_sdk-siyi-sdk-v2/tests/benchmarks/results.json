@@ -1,0 +1,8 @@
+{
+  "test": "parser_10mb_throughput",
+  "size_mb": 10.0,
+  "elapsed_sec": 3.7073954219995358,
+  "mb_per_sec": 2.6973114172446784,
+  "frames_parsed": 76259,
+  "frames_per_sec": 20569.427136766193
+}

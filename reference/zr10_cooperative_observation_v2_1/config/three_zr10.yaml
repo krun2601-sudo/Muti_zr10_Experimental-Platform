@@ -1,0 +1,170 @@
+system:
+  session_name: three_zr10_synchronized_validation
+  control_rate_hz: 10.0
+  duration_s: 32.0
+
+  attitude_stream_hz: 10
+  feedback_stale_s: 1.0
+  fallback_poll_interval_s: 0.5
+  fresh_feedback_timeout_s: 4.0
+
+  # Connect sequentially with retries; avoids simultaneous command bursts.
+  connect_attempts: 3
+  connect_retry_delay_s: 1.0
+  connect_stagger_s: 0.25
+
+  command_wait_for_ack: true
+  command_change_threshold_deg: 0.05
+  command_resend_interval_s: 0.30
+  target_tolerance_deg: 1.5
+  max_consecutive_command_errors: 5
+
+  require_all_devices: true
+  continue_on_command_error: true
+
+  # LOCK is best-effort because some old firmware does not ACK mode switching.
+  startup_lock_mode: true
+  startup_lock_required: false
+  startup_center: false
+  startup_center_settle_s: 3.0
+
+  # Move each device to a known initial local AE before the validation policy.
+  startup_move_to_initial: true
+  startup_initial_required: true
+  startup_initial_settle_timeout_s: 15.0
+  startup_progress_interval_s: 1.0
+
+  startup_clear_attitude_stream: true
+  startup_stop_motion: true
+  startup_connection_settle_s: 0.35
+
+  initialization_attempts: 2
+  initialization_retry_delay_s: 1.0
+
+  center_on_shutdown: false
+  shutdown_settle_s: 0.30
+  stop_command_repetitions: 2
+  stop_command_interval_s: 0.08
+
+  log_root: logs
+  csv_queue_size: 30000
+  csv_flush_interval_s: 0.5
+
+policy:
+  type: synchronized_steps
+  repeat: false
+  steps:
+    - label: initial_hold
+      duration_s: 2.0
+      azimuth_deg: 0.0
+      elevation_deg: -10.0
+    - label: turn_right
+      duration_s: 4.0
+      azimuth_deg: 15.0
+      elevation_deg: -10.0
+    - label: turn_left
+      duration_s: 6.0
+      azimuth_deg: -15.0
+      elevation_deg: -10.0
+    - label: look_down
+      duration_s: 8.0
+      azimuth_deg: 0.0
+      elevation_deg: -20.0
+    - label: return_initial
+      duration_s: 10.0
+      azimuth_deg: 0.0
+      elevation_deg: -10.0
+
+gimbals:
+  - id: gimbal_01
+    name: ZR10-25
+    ip: 192.168.144.25
+    control_port: 37260
+    enabled: true
+    initial_azimuth_deg: 0.0
+    initial_elevation_deg: -10.0
+    yaw_min_deg: -130.0
+    yaw_max_deg: 130.0
+    pitch_min_deg: -85.0
+    pitch_max_deg: 25.0
+    azimuth_to_yaw_sign: 1.0
+    elevation_to_pitch_sign: 1.0
+    yaw_velocity_sign: 1.0
+    pitch_velocity_sign: -1.0
+    yaw_offset_deg: 0.0
+    pitch_offset_deg: 0.0
+    normalize_pitch_feedback: true
+    command_timeout_s: 1.2
+    max_retries: 1
+    control_mode: velocity_p
+    yaw_kp: 2.0
+    pitch_kp: 2.0
+    yaw_speed_limit: 30
+    pitch_speed_limit: 30
+    minimum_speed: 10
+    speed_quantization: 2
+    control_deadband_deg: 0.8
+    velocity_use_ack: true
+    velocity_ack_fallback_nowait: true
+
+  - id: gimbal_02
+    name: ZR10-26
+    ip: 192.168.144.26
+    control_port: 37260
+    enabled: true
+    initial_azimuth_deg: 0.0
+    initial_elevation_deg: -10.0
+    yaw_min_deg: -130.0
+    yaw_max_deg: 130.0
+    pitch_min_deg: -85.0
+    pitch_max_deg: 25.0
+    azimuth_to_yaw_sign: 1.0
+    elevation_to_pitch_sign: 1.0
+    yaw_velocity_sign: 1.0
+    pitch_velocity_sign: -1.0
+    yaw_offset_deg: 0.0
+    pitch_offset_deg: 0.0
+    normalize_pitch_feedback: true
+    command_timeout_s: 1.2
+    max_retries: 1
+    control_mode: velocity_p
+    yaw_kp: 2.0
+    pitch_kp: 2.0
+    yaw_speed_limit: 30
+    pitch_speed_limit: 30
+    minimum_speed: 10
+    speed_quantization: 2
+    control_deadband_deg: 0.8
+    velocity_use_ack: true
+    velocity_ack_fallback_nowait: true
+
+  - id: gimbal_03
+    name: ZR10-27
+    ip: 192.168.144.27
+    control_port: 37260
+    enabled: true
+    initial_azimuth_deg: 0.0
+    initial_elevation_deg: -10.0
+    yaw_min_deg: -130.0
+    yaw_max_deg: 130.0
+    pitch_min_deg: -85.0
+    pitch_max_deg: 25.0
+    azimuth_to_yaw_sign: 1.0
+    elevation_to_pitch_sign: 1.0
+    yaw_velocity_sign: 1.0
+    pitch_velocity_sign: -1.0
+    yaw_offset_deg: 0.0
+    pitch_offset_deg: 0.0
+    normalize_pitch_feedback: true
+    command_timeout_s: 1.2
+    max_retries: 1
+    control_mode: velocity_p
+    yaw_kp: 2.0
+    pitch_kp: 2.0
+    yaw_speed_limit: 30
+    pitch_speed_limit: 30
+    minimum_speed: 10
+    speed_quantization: 2
+    control_deadband_deg: 0.8
+    velocity_use_ack: true
+    velocity_ack_fallback_nowait: true

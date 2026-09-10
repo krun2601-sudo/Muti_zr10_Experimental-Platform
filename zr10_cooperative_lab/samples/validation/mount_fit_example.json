@@ -1,0 +1,66 @@
+{
+  "mount_ypr_deg": [
+    0.0,
+    25.0,
+    0.0
+  ],
+  "position_enu_m": [
+    0.0,
+    -30.0,
+    2.0
+  ],
+  "position_offset_m": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "rms_angle_deg": 3.0185456743143334e-07,
+  "max_angle_deg": 8.537736462515939e-07,
+  "jacobian_condition": 2.628206032850012,
+  "parameter_covariance": [
+    [
+      5.305252469881958e-12,
+      -1.3980360258037064e-13,
+      -3.135424379248501e-13
+    ],
+    [
+      -1.3980360258037026e-13,
+      4.589268606911358e-12,
+      -1.1620761747588981e-12
+    ],
+    [
+      -3.1354243792485043e-13,
+      -1.1620761747588957e-12,
+      3.1089459995640414e-11
+    ]
+  ],
+  "per_point_angle_deg": [
+    0.0,
+    8.537736462515939e-07,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "success": true,
+  "message": "`gtol` termination condition is satisfied.",
+  "config_device_patch": {
+    "id": "zr10_25",
+    "position_m": [
+      0.0,
+      -30.0,
+      2.0
+    ],
+    "mount_rpy_deg": [
+      0.0,
+      25.0,
+      0.0
+    ],
+    "calibration_verified": false
+  },
+  "source_control_csv": "D:\\1Xingrunqiang\\pycharmpro\\M_zr10_V1\\ZR10_EXP_Plant\\zr10_cooperative_lab\\tests\\fixtures\\release_calibration_controls.csv",
+  "created_utc": "2026-09-07T10:51:40.124367+00:00",
+  "review_required": "请用独立验证数据检查结果后，手动更新实验配置；本命令不确认实机标定状态"
+}

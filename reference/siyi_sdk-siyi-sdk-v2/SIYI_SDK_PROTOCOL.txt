@@ -1,0 +1,7665 @@
+SIYI Gimbal Camera External
+SDK Protocol Document
+Update Log
+
+Version
+
+V0.1.1
+
+Change Date
+
+Change Details
+
+Remarks
+
+2025.02.26
+
+Added Appendix 1
+and Appendix 2
+
+Added gimbal
+control command
+support list
+
+SIYI Technology (Shenzhen) Co., Ltd.
+https://siyi.biz/en/
+2 / 110
+
+Contact Us: SIYI Official Website (https://SIYI.biz/en)
+
+SIYI User Group Facebook
+
+Facebook
+
+Linkedln
+
+YouTube
+
+3 / 110
+
+CHAPTER 1 Protocol Description
+1、Protocol Format
+Field
+
+Index
+
+Bytes
+
+STX
+
+0
+
+2
+
+Description
+0x6655: starting mark.
+Low byte in the front
+0: need_ack (if the current data pack need “ack”)
+
+CTRL
+
+2
+
+1
+
+1: ack_pack (if the current data pack is an “ack” package)
+2-7: reserved
+Date field byte length
+
+Data_len
+
+3
+
+2
+
+SEQ
+
+5
+
+2
+
+CMD_ID
+
+7
+
+1
+
+Command ID
+
+DATA
+
+8
+
+Data_len
+
+Data
+
+CRC16
+
+2
+
+Low byte in the front
+Frame sequence (0 ~ 65535)
+Low byte in the front
+
+CRC16 check to the complete data package.
+Low byte in the front
+
+4 / 110
+
+CHAPTER 2 Communication Commands
+0x00：TCP
+
+Heartbeat
+
+CMD_ID:0x00------TCP Heartbeat
+
+Send Data Format
+Index
+
+Data Type
+
+Data Name
+
+Description
+
+ACK Data Format:
+No ACK response
+
+Notes:
+
+·Heartbeat packet: 55 66 01 01 00 00 00 00 00 59 8B
+·Only supported in TCP connection
+
+0x01: Request Firmware Version
+CMD_ID:0x01------Request Firmware Version
+sendData Format
+
+Index
+
+Data Type Data Name
+
+Description
+
+ACK Data Format
+uint32_t
+
+camera_firmware_ver
+
+Camera firmware version number
+
+uint32_t
+
+gimbal_firmware_ver
+
+Gimbal firmware version number
+
+uint32_t
+
+zoom_firmware_ver
+
+Zoom module firmware version
+number
+
+Eg：0x6E030203 -->
+
+Corresponding version：v3.2.3
+
+Notes:
+5 / 110
+
+·The 4th byte (high byte) should be ignored.
+·Since the camera system requires a startup time of up to 30 seconds, the firmware
+version cannot be retrieved during this period. Any request made before system
+initialization will return a firmware version of 0.0.0 (all zeros).
+
+6 / 110
+
+0x02：Request Gimbal Hardware ID
+CMD_ID:0x02------ Request Gimbal Hardware ID
+Send Data Format
+
+No.
+
+Data Type
+
+Name
+
+Description
+
+hardware_id[12]
+
+Hardware ID string (10-digit)
+
+ACK Data Format
+Uint8_t
+
+Note: The first two bytes correspond to the hexadecimal product ID as follows:
+0x6B: ZR10 10x Optical Zoom Gimbal Camera
+0x73: A8 Mini Gimbal Camera
+0x75: A2 Mini Gimbal Camera
+0x78: ZR30 Gimbal Camera
+0x7A: Quad-Spectrum Gimbal Camera
+
+7 / 110
+
+0x04：Auto Focus
+CMD_ID:0x04------Auto Focus
+
+Send Data Format
+No.
+
+Data Type
+
+Name
+
+Description
+
+uint8_t
+
+auto_focus
+
+1: Trigger single autofocus
+
+uint16_t
+
+touch_x
+
+X coordinate, range corresponds
+to video stream width
+
+uint16_t
+
+touch_y
+
+Y coordinate, range corresponds
+to video stream height
+
+ACK Data Format
+1
+
+uint8_t
+
+sta
+
+1: Success,
+0: Error
+
+Note:
+Only supported by optical zoom cameras.In split zoom mode, the X-coordinate range
+is half of the video stream width.
+
+0x05：Manual Zoom with Autofocus
+CMD_ID:0x05------Manual Zoom with Autofocus
+
+Send Data Format
+No.
+
+Data Type
+
+Name
+
+Description
+
+1
+
+int8_t
+
+zoom
+
+1: Zoom in, 0: Stop zooming
+(send after release), -1: Zoom out
+
+zoom_multiple
+
+Current (hybrid) zoom level
+(zoom_multiple /10, accurate to
+one decimal place)
+
+ACK Data Format
+1
+
+uint16_t
+
+8 / 110
+
+0x06：Manual Focus
+CMD_ID:0x06------Manual Focus
+
+Send Data Format
+No.
+
+Data Type
+
+Name
+
+Description
+
+1
+
+int8_t
+
+focus
+
+1: Far focus, 0: Stop focusing
+(send after release), -1: Near focus
+
+ACK Data Format
+uint8_t
+
+sta
+
+1: Success
+0: Error
+
+Note: Only supported by optical zoom cameras.
+0x07：Gimbal Rotation Control
+CMD_ID:0x07------Gimbal Rotation
+
+Send Data Format
+No.
+
+Data Type
+
+Name
+
+Description
+
+1
+
+int8_t
+
+turn_yaw
+
+-100 ~ 0 ~ 100: Negative/positive
+values indicate direction. The
+further the slide, the greater the
+value and rotation speed. Send 0
+after release to stop rotation.
+(Swipe right: 0(-100))
+
+2
+
+int8_t
+
+turn_pitch
+
+-100 ~ 0 ~ 100: Same as yaw
+(Swipe up:(-100))
+
+ACK Data Format
+uint8_t
+
+sta
+
+1: Success
+0: Error
+
+9 / 110
+
+0x08：One-Key Centering
+CMD_ID:0x08------One-Key Centering
+
+Send Data Format
+Index
+
+Data Type
+
+Data Name
+
+Description
+1: One-key center
+
+1
+
+uint8_t
+
+center_pos
+
+2: Center downward
+3: Center
+4: Downward
+
+ACK Data Format
+1
+
+uint8_t
+
+sta
+
+1: Success
+0: Error
+
+0x0A：Request Camera System Information
+(Formerly "Request Gimbal Configuration Information")
+CMD_ID:0x0A------Request Camera System Information
+
+Send Data Format
+Index
+
+Data Type
+
+Data Name
+
+Description
+
+ACK Data Format
+1
+
+uint8_t
+
+reserved
+
+2
+
+uint8_t
+
+hdr_sta
+
+3
+
+uint8_t
+
+reserved
+
+0: Off
+1: On
+
+0: Not recording
+4
+
+uint8_t
+
+record_sta
+
+1: Recording
+2: No TF card
+10 / 110
+
+3: Video data loss (check TF card)
+0: Lock mode
+5
+
+uint8_t
+
+gimbal_motion_mode
+
+1: Follow mode
+2: FPV mode
+Gimbal Mounting Direction
+
+6
+
+uint8_t
+
+gimbal_mounting_dir
+
+0: Reserved
+1: Normal
+2: Inverted
+HDMI and CVBS Video Output
+Status
+0：
+
+HDMI video output ON
+7
+
+uint8_t
+
+video_hdmi_or_cvbs
+
+CVBS video output OFF
+1：
+
+HDMI video output OFF
+CVBS video output ON
+Zoom Linkage Switch
+8
+
+uint8_t
+
+zoom_linkage
+
+0：Off
+1：On
+
+0x0B：Function Feedback Response
+CMD_ID:0x0B------Function Feedback Response
+
+Send Data Format
+Index
+
+Data Type
+
+Data Name
+
+Description
+
+info_type
+
+0: Photo captured successfully
+
+ACK Data Format
+1
+
+uint8_t
+
+11 / 110
+
+1: Photo failed (check TF card),
+2: HDR on
+3: HDR off
+4: Video recording failed (check
+TF card)
+5: Recording started
+6: Recording stopped
+0x0C：Capture Photo / Record Video
+CMD_ID:0x0C------Capture Photo
+
+Send Data Format
+Index
+
+Data Type
+
+Data Name
+
+Description
+0: Capture photo
+1: HDR toggle (not supported)
+2: Start recording
+3: Lock mode
+4: Follow mode
+5: FPV mode
+
+uint8_t
+
+func_type
+
+6: Enable HDMI output (reboot
+required)
+7: Enable CVBS output (reboot
+required)
+8: Disable HDMI/CVBS (reboot
+required)
+9: Tilt downward
+10: Zoom linkage
+
+ACK Data Format
+No ACK response
+
+12 / 110
+
+0x0D：Request Gimbal Attitude Data
+CMD_ID:0x0D------Request Gimbal Attitude Data
+
+Send Data Format
+Index
+
+Data Type
+
+Parameter
+Name
+
+Description
+
+int16_t
+
+yaw
+
+Yaw angle
+
+int16_t
+
+pitch
+
+Pitch angle
+
+int16_t
+
+roll
+
+Roll angle
+
+int16_t
+
+yaw_velocity
+
+Gyroscope yaw angular velocity
+
+int16_t
+
+pitch_velocity
+
+Gyroscope pitch angular velocity
+
+int16_t
+
+roll_velocity
+
+Gyroscope roll angular velocity
+
+ACK 数据格式
+
+Notes:
+The actual angle values are obtained by dividing the received data by 10, with a precision of
+one decimal place.
+It is recommended to use command 0x25 to set the data transmission frequency, allowing
+attitude data to be sent continuously at a specified interval.
+The rotation sequence follows Yaw axis → Roll axis → Pitch axis, and the coordinate system
+follows the NED (North-East-Down) convention. The yaw angle is derived from a magnetic
+encoder.
+
+13 / 110
+
+0x0E： Set Gimbal Attitude Angles
+CMD_ID:0x0E------Set Gimbal Attitude Angles
+send 数据格式 Send Data Format
+Index
+
+Data Type
+
+Parameter Name
+
+Description
+
+int16_t
+
+yaw
+
+Target yaw angle
+
+int16_t
+
+pitch
+
+Target pitch angle
+
+int16_t
+
+yaw
+
+Current yaw angle
+
+int16_t
+
+pitch
+
+Current pitch angle
+
+int16_t
+
+roll
+
+Current roll angle
+
+ACK Data Format
+
+Angle Control Range:
+yaw:
+A2 mini: Fixed, non-rotatable
+A8 mini: -135.0° to 135.0°
+ZR10: Same as A8 mini
+ZR30: -270.0° to 270.0°
+ZT30: Unlimited
+pitch:
+A2 mini: -90.0° to 25.0°
+A8 mini: -90.0° to 25.0°
+ZR10: Same as A8 mini
+ZR30: Same as A8 mini
+ZT30: Same as A8 mini
+The control angle precision is one decimal place. For example, if specifying a yaw of 60.5°,
+the yaw field should be set to 605.
+The returned actual angles in the ACK message should be divided by 10 to obtain the real
+values, with one decimal place precision.
+
+14 / 110
+
+0x0F：Absolute Zoom Auto Focus
+CMD_ID:0x0F------Absolute Zoom Auto Focus
+
+Send Data Format
+Index
+
+Data Type
+
+Parameter Name
+
+Description
+
+1
+
+uint8_t
+
+Absolute_movement
+_int
+
+Integer part of the specified zoom
+(0X1 ~ 0X1E)
+
+2
+
+uint8_t
+
+Absolute_movement
+_float
+
+Decimal part of the specified
+zoom (0X0 ~ 0X9)
+
+Absolute_movement
+_ask
+
+Return success: 1
+
+ACK Data Format
+uint8_t
+
+0x10：Request Video Stitching Mode
+CMD_ID:0x10------Request Video Stitching Mode
+
+Send Data Format
+NO.
+
+Data Type
+
+Parameter Name
+
+Description
+
+ACK Data Format
+Video stitching mode:
+0：Stitching mode (Main stream: Zoom
+
+& Thermal, Sub stream: Wide angle)
+
+1：Stitching mode (Main stream: Wide
+1
+
+uint8_t
+
+vdisp_mode
+
+angle & Thermal, Sub stream: Zoom)
+
+2：Stitching mode (Main stream: Zoom
+
+& Wide angle, Sub stream: Thermal)
+
+3：Non-stitching mode (Main stream:
+
+Zoom, Sub stream: Thermal)
+
+4：Non-stitching mode (Main stream:
+15 / 110
+
+Zoom, Sub stream: Wide angle)
+5：Non-stitching mode (Main stream:
+
+Wide angle, Sub stream: Thermal)
+
+6：Non-stitching mode (Main stream:
+
+Wide angle, Sub stream: Zoom)
+
+7：Non-stitching mode (Main stream:
+
+Thermal, Sub stream: Zoom)
+
+8：Non-stitching mode (Main stream:
+
+Thermal, Sub stream: Wide angle)
+
+0x11：Set Video Stitching Mode
+CMD_ID:0x11------Set Video Stitching Mode
+
+Send Data Format
+Index
+
+Data Type
+
+Parameter Name Description
+Video stitching mode:
+0：Stitching mode (Main stream: Zoom
+
+& Thermal, Sub stream: Wide angle)
+
+1：Stitching mode (Main stream: Wide
+
+angle & Thermal, Sub stream: Zoom)
+
+2：Stitching mode (Main stream: Zoom
+
+& Wide angle, Sub stream: Thermal)
+
+3：Non-stitching mode (Main stream:
+1
+
+uint8_t
+
+vdisp_mode
+
+Zoom, Sub stream: Thermal)
+
+4：Non-stitching mode (Main stream:
+
+Zoom, Sub stream: Wide angle)
+
+5：Non-stitching mode (Main stream:
+
+Wide angle, Sub stream: Thermal)
+
+6：Non-stitching mode (Main stream:
+
+Wide angle, Sub stream: Zoom)
+
+7：Non-stitching mode (Main stream:
+
+Thermal, Sub stream: Zoom)
+
+8：Non-stitching mode (Main stream:
+16 / 110
+
+Thermal, Sub stream: Wide angle)
+ACK Data Format
+Video stitching mode:
+0：Stitching mode (Main stream: Zoom
+
+& Thermal, Sub stream: Wide angle)
+
+1：Stitching mode (Main stream: Wide
+
+angle & Thermal, Sub stream: Zoom)
+
+2：Stitching mode (Main stream: Zoom
+
+& Wide angle, Sub stream: Thermal)
+
+3：Non-stitching mode (Main stream:
+
+Zoom, Sub stream: Thermal)
+1
+
+uint8_t
+
+vdisp_mode
+
+4：Non-stitching mode (Main stream:
+
+Zoom, Sub stream: Wide angle)
+
+5：Non-stitching mode (Main stream:
+
+Wide angle, Sub stream: Thermal)
+
+6：Non-stitching mode (Main stream:
+
+Wide angle, Sub stream: Zoom)
+
+7：Non-stitching mode (Main stream:
+
+Thermal, Sub stream: Zoom)
+
+8：Non-stitching mode (Main stream:
+
+Thermal, Sub stream: Wide angle)
+
+17 / 110
+
+0x12：Get Temperature at Selected Point
+CMD_ID:0x12------Get Temperature at Selected Point
+
+Send Data Format
+Index
+
+Data Type
+
+Parameter Name
+
+Description
+
+1
+
+uint16_t
+
+x
+
+X coordinate of the selected
+point
+
+2
+
+uint16_t
+
+y
+
+Y coordinate of the selected
+point
+
+3
+
+uint8_t
+
+get_temp_flag
+
+0：Disable measurement, 1:
+
+Measure once, 2: Continuous
+measurement (5Hz)
+
+ACK Data Format
+1
+
+uint16_t
+
+temp
+
+Temperature at the selected point
+(divide by 100 for two decimal
+places)
+
+1
+
+uint16_t
+
+x
+
+X coordinate of the selected
+point
+
+2
+
+uint16_t
+
+y
+
+Y coordinate of the selected
+point
+
+0x13：Local Temperature Measurement
+CMD_ID:0x13------Local Temperature Measurement
+
+Send Data Format
+Index
+
+Data Type
+
+Parameter Name
+
+Description
+
+1
+
+uint16_t
+
+startx
+
+Starting X coordinate of the
+rectangle
+
+2
+
+uint16_t
+
+starty
+
+Starting Y coordinate of the
+rectangle
+
+3
+
+uint16_t
+
+endx
+
+Ending X coordinate of the
+rectangle
+
+18 / 110
+
+4
+
+uint16_t
+
+endy
+
+Ending Y coordinate of the
+rectangle
+
+5
+
+uint8_t
+
+get_temp_flag
+
+0: Disable measurement, 1:
+Measure once, 2: Continuous
+measurement (5Hz)
+
+ACK Data Format
+1
+
+uint16_t
+
+startx
+
+Starting X coordinate of the
+rectangle
+
+2
+
+uint16_t
+
+starty
+
+Starting Y coordinate of the
+rectangle
+
+3
+
+uint16_t
+
+endx
+
+Ending X coordinate of the
+rectangle
+
+4
+
+uint16_t
+
+endy
+
+Ending Y coordinate of the
+rectangle
+
+5
+
+uint16_t
+
+temp_max
+
+Maximum temperature in the
+rectangle (divide by 100 for two
+decimal places)
+
+6
+
+uint16_t
+
+temp_min
+
+Minimum temperature in the
+rectangle (divide by 100 for two
+decimal places)
+
+7
+
+uint16_t
+
+temp_max_x
+
+X coordinate of the maximum
+temperature
+
+8
+
+uint16_t
+
+temp_max_y
+
+Y coordinate of the maximum
+temperature
+
+9
+
+uint16_t
+
+temp_min_x
+
+X coordinate of the minimum
+temperature
+
+10
+
+uint16_t
+
+temp_min_y
+
+Y coordinate of the minimum
+temperature
+
+Note:
+
+The thermal camera has electronic zoom functionality. When zooming electronically,
+the measurement box will be scaled up or down based on the zoom factor. It is
+recommended to refer to the camera's returned box for temperature measurement
+ranges.
+
+19 / 110
+
+0x14：Global Temperature Measurement
+CMD_ID:0x14------Global Temperature Measurement
+
+Send Data Format
+Index
+
+Data Type
+
+Parameter Name
+
+Description
+
+1
+
+uint8_t
+
+get_temp_flag
+
+0: Disable measurement, 1:
+Measure once, 2: Continuous
+measurement (5Hz)
+
+temp_max
+
+Maximum temperature in the
+frame (divide by 100 for two
+decimal places)
+
+ACK Data Format
+1
+
+uint16_t
+
+2
+
+uint16_t
+
+temp_min
+
+Minimum temperature in the
+frame (divide by 100 for two
+decimal places)
+
+3
+
+uint16_t
+
+temp_max_x
+
+X coordinate of the maximum
+temperature in the frame
+
+4
+
+uint16_t
+
+temp_max_y
+
+Y coordinate of the maximum
+temperature in the frame
+
+5
+
+uint16_t
+
+temp_min_x
+
+X coordinate of the minimum
+temperature in the frame
+
+6
+
+uint16_t
+
+temp_min_y
+
+Y coordinate of the minimum
+temperature in the frame
+
+0x15：Request Laser Distance Measurement
+CMD_ID:0x15------Request Laser Distance Measurement
+
+Send Data Format
+NO.
+
+Data Type
+
+Parameter Name
+
+Description
+
+laser_distance
+
+Laser distance value, low byte
+first, high byte second, minimum
+
+ACK Data Format
+1
+
+Uint16_t
+
+20 / 110
+
+value 50, unit: dm
+Note:
+Recommended to use the 0x25 command to set the laser distance data transmission
+frequency for continuous sending.
+Laser distance ranges from 5m to 1200m. If the value is outside this range, the
+distance will be reported as 0.
+
+21 / 110
+
+0x16：Request Current Supported Zoom Range
+CMD_ID:0x16------Request Current Supported Zoom Range
+
+Send Data Format
+NO.
+
+Data Type
+
+Parameter
+Name
+
+Description
+
+uint8_t
+
+zoom_max_int
+
+Maximum zoom integer part
+
+Uint8_t
+
+Zoom_max_float Maximum zoom decimal part
+
+ACK Data Format
+
+Note:
+Only cameras with zoom capabilities support this command.
+0x17：Request Laser Distance Target's Longitude and Latitude
+CMD_ID:0x17------Request Laser Distance Target's Longitude and Latitude
+
+Send Data Format
+NO.
+
+Data Type
+
+Parameter
+Name
+
+Description
+
+ACK Data Format
+int32_t
+
+Lon_degE7
+
+Longitude [degE7] (WGS84, EGM96
+ellipsoid)
+
+int32_t
+
+Lat_degE7
+
+Latitude [degE7] (WGS84, EGM96
+ellipsoid)
+
+0x18：Request Current Zoom Magnification
+CMD_ID:0x18------Request Current Zoom Magnification
+
+Send Data Format
+NO.
+
+Data Type
+
+Parameter
+Name
+
+Description
+22 / 110
+
+ACK Data Format
+uint8_t
+
+zoom_int
+
+Current zoom integer part
+
+Uint8_t
+
+Zoom_float
+
+Current zoom decimal part
+
+0x19：Request Current Gimbal Mode
+CMD_ID:0x19------Request Current Gimbal Mode
+
+Send Data Format
+NO.
+
+Data Type
+
+Parameter Name
+
+Description
+
+ACK Data Format
+0: Lock mode
+uint8_t
+
+gimbal_mode
+
+1: Follow mode
+2: FPV mode (First Person
+View)
+
+23 / 110
+
+0x1A：Request Current Thermal Imaging Pseudo-Color
+CMD_ID:0x1A------Request Current Thermal Imaging Pseudo-Color
+
+Send Data Format
+NO.
+
+Data Type
+
+Parameter Name
+
+Description
+
+ACK Data Format
+11 color swatches available:
+0: White_Hot
+1: Reserved
+2: Sepia
+3: Ironbow
+4: Rainbow
+uint8_t
+
+pseudo color
+
+5: Night
+6: Aurora
+7: Red_Hot
+8: Jungle
+9: Medical
+10: Black_Hot
+11: Glory_Hot
+
+24 / 110
+
+0x1B：Set Thermal Imaging Pseudo-Color
+CMD_ID:0x1B------Set Thermal Imaging Pseudo-Color
+
+Send Data Format
+Index
+
+Data Type
+
+Parameter Name
+
+Description
+11 color swatches available:
+0: White_Hot
+1: Reserved
+2: Sepia
+3: Ironbow
+4: Rainbow
+
+uint8_t
+
+pseudo color
+
+5: Night
+6: Aurora
+7: Red_Hot
+8: Jungle
+9: Medical
+10: Black_Hot
+11: Glory_Hot
+
+ACK Data Format
+【Total of 11 color swatches.】
+0：White_Hot
+1：Reserved
+2：Sepia
+uint8_t
+
+pseudo color
+
+3：Ironbow
+4：Rainbow
+5：Night
+6：Aurora
+7：Red_Hot
+
+25 / 110
+
+8：Jungle
+9：Medical
+10：Black_Hot
+11：Glory_Hot
+
+0x20：Request Camera Encoding Parameters
+CMD_ID:0x20------Request Camera Encoding Parameters
+
+Send Data Format
+No.
+
+Data Type
+
+Data Name
+
+Description
+0: Recording stream
+
+uint8_t
+
+req_stream _type
+
+1: Main stream
+2: Sub-stream
+
+ACK
+
+0: Recording stream
+1
+
+uint8_t
+
+stream _type
+
+1: Main stream
+2: Sub-stream
+
+2
+
+uint8_t
+
+VideoEncType
+
+Encoding type: 1: H264, 2:
+H265
+
+3
+
+uint16_t
+
+Resolution_ L
+
+Resolution width
+
+4
+
+uint16_t
+
+Resolution_ H
+
+Resolution height
+
+5
+
+uint16_t
+
+VideoBitrate
+
+Fixed bitrate in Kbps
+
+6
+
+uint8_t
+
+VideoFrameRate
+
+Frame rate
+
+26 / 110
+
+0x21：Set Camera Encoding Parameters
+CMD_ID:0x21------Set Camera Encoding Parameters
+
+Send Data Format
+NO.
+1
+
+Data Type
+uint8_t
+
+Data Name
+
+Description
+
+stream_type
+
+0: Set recording stream, 1:
+Set main stream, 2: Set
+sub-stream
+
+2
+
+uint8_t
+
+VideoEncType
+
+Encoding type: 1: H264, 2:
+H265 (Recording stream
+encoding format cannot be
+modified)
+
+3
+
+uint16_t
+
+Resolution_L
+
+Resolution width: 1920, 1280
+
+4
+
+uint16_t
+
+Resolution_H
+
+Resolution height: 1080, 720
+
+5
+
+uint16_t
+
+VideoBitrate
+
+Fixed bitrate in Kbps
+
+6
+
+uint8_t
+
+reserve
+
+Reserved
+
+ACK
+1
+
+uint8_t
+
+stream_type
+
+0: Set recording stream, 1:
+Set main stream, 2: Set
+sub-stream
+
+2
+
+uint8_t
+
+sta
+
+1: Set successful, 0: Set failed
+
+0x22：Send Aircraft Attitude Data to Gimbal
+CMD_ID:0x22------Send Aircraft Attitude Data to Gimbal
+
+Send Data Format
+No.
+
+Data Type
+
+Data Name
+
+Description
+
+27 / 110
+
+1
+
+uin32_t
+
+time_boot_ms
+
+[ms]Timestamp (time since
+system boot)
+
+1
+
+float
+
+Roll
+
+[rad] Roll angle
+
+2
+
+float
+
+Pitch
+
+[rad] Pitch angle (-pi/2..+pi/2)
+
+3
+
+float
+
+Yaw
+
+[rad] Yaw angle
+
+4
+
+float
+
+Rollspeed
+
+[rad/s] Roll angular speed
+
+5
+
+float
+
+Pitchspeed
+
+[rad/s] Pitch angular speed
+
+6
+
+float
+
+Yawspeed
+
+[rad/s] Yaw angular speed
+
+(-pi..+pi)
+
+(-pi..+pi)
+
+ACK
+
+Ps：The coordinate system is North-East-Down (NED), with rotation order being yaw
+
+-> pitch -> roll. Recommended frequency is 20-50Hz.
+
+28 / 110
+
+0x23：Send RC Channel Data to Gimbal (Not in Use)
+CMD_ID:0x23------Send RC Channel Data to Gimbal
+
+Send Data Format
+No.
+
+Data Type
+
+Data Name
+
+Description
+
+1
+
+uint16_t
+
+chan1_raw
+
+[us] RC channel 1 value
+
+2
+
+uint16_t
+
+chan2_raw
+
+[us] RC channel 2 value
+
+3
+
+uint16_t
+
+chan3_raw
+
+[us] RC channel 3 value
+
+4
+
+uint16_t
+
+chan4_raw
+
+[us] RC channel 4 value
+
+5
+
+uint16_t
+
+chan5_raw
+
+[us] RC channel 5 value
+
+6
+
+uint16_t
+
+chan6_raw
+
+[us] RC channel 6 value
+
+7
+
+uint16_t
+
+chan7_raw
+
+[us] RC channel 7 value
+
+8
+
+uint16_t
+
+chan8_raw
+
+[us] RC channel 8 value
+
+9
+
+uint16_t
+
+chan9_raw
+
+[us] RC channel 9 value
+
+10
+
+uint16_t
+
+chan10_raw
+
+[us] RC channel 10 value
+
+11
+
+uint16_t
+
+chan11_raw
+
+[us] RC channel 11 value
+
+12
+
+uint16_t
+
+chan12_raw
+
+[us] RC channel 12 value
+
+13
+
+uint16_t
+
+chan13_raw
+
+[us] RC channel 13 value
+
+14
+
+uint16_t
+
+chan14_raw
+
+[us] RC channel 14 value
+
+15
+
+uint16_t
+
+chan15_raw
+
+[us] RC channel 15 value
+
+16
+
+uint16_t
+
+chan16_raw
+
+[us] RC channel 16 value
+
+29 / 110
+
+17
+
+uint16_t
+
+chan17_raw
+
+[us] RC channel 17 value
+
+18
+
+uint16_t
+
+chan18_raw
+
+[us] RC channel 18 value
+
+chancount
+
+Total number of RC channels
+being received. This can be
+larger than 18, indicating that
+more channels are available but
+not given in this message. This
+value should be 0 when no RC
+channels are available.
+
+rssi
+
+Receive signal strength indicator
+in device-dependent units/scale.
+Values: [0-254], 255:
+invalid/unknown.
+
+19
+
+20
+
+uint8_t
+
+uint8_t
+
+ACK
+
+30 / 110
+
+0x24：Request Flight Controller to Send Data Stream to Gimbal
+CMD_ID:0x24------Request Flight Controller to Send Data Stream to Gimbal
+
+Send Data Format
+No.
+1
+
+Data Type
+uint8_t
+
+Data Name
+
+Description
+
+data_type
+
+1: Attitude Data
+2: RC Channel Data (not in
+use)
+Output frequency:
+0: Turn off
+1：2Hz
+2：4Hz
+
+2
+
+uint8_t
+
+data_freq
+
+3：5Hz
+4：10Hz
+5：20Hz
+6：50Hz
+7：100Hz
+
+ACK
+1
+
+uint8_t
+
+data_type
+
+1: Attitude Data
+2: RC Channel Data
+
+31 / 110
+
+0x25：Request Gimbal to Send Data Stream
+CMD_ID:0x25------Request Gimbal to Send Data Stream
+
+Send Data Format
+No.
+
+1
+
+Data Type
+
+uint8_t
+
+Data Name
+
+Description
+
+data_type
+
+1: Attitude Data
+2: Laser Range Data
+3: Magnetic Encoder Angle
+Data
+4: Motor Voltage Data
+Output frequency:
+0: Turn off1：2Hz
+2：4Hz
+3：5Hz
+4：10Hz
+
+2
+
+uint8_t
+
+data_freq
+
+5：20Hz
+6：50Hz
+7：100Hz
+
+Note: Laser data output
+frequency ignores this setting
+and is based on actual output
+frequency.
+ACK
+1
+
+uint8_t
+
+data_type
+
+1: Attitude Data
+2: Laser Range Data
+
+Note: Laser Range Data frequency cannot be set; any non-zero value will start
+sending.
+0x26：Request Gimbal Magnetic Encoder Angle Data
+
+32 / 110
+
+CMD_ID:0x26------Request Gimbal Magnetic Encoder Angle Data
+
+Send Data Format
+No.
+
+Data Type
+
+Data Name
+
+Description
+
+int16_t
+
+yaw_angle
+
+Yaw angle
+
+int16_t
+
+pitch_angle
+
+Pitch angle
+
+int16_t
+
+roll_angle
+
+Roll angle
+
+ACK Data Format
+
+Note: The above data should be divided by 10 to obtain the actual angle, with a
+precision of one decimal place.
+Note: It is recommended to use the 0x25 command to set the attitude data
+transmission frequency, so that the data can be actively and continuously sent at the
+specified frequency.
+
+0x27：Request Gimbal Control Mode Data
+CMD_ID:0x27------Request Gimbal Control Mode Data
+
+Send Data Format
+No.
+
+Data Type Data Name
+
+Description
+
+ACK Data Format
+Control mode:
+0.Attitude_Mode
+uint8_t
+
+Control_mode
+
+1.Weak_Mode
+2. Middle_Mode
+3. FPV_Mode
+4. Motor_Close
+
+Note: This command is only available for ArduPilot debugging and is not supported
+by other systems.
+
+33 / 110
+
+0x28：Request Gimbal Weak Control Threshold Data
+CMD_ID:0x28------Request Gimbal Weak Control Threshold Data
+
+Send Data Format
+No.
+
+Data
+Type
+
+Data Name
+
+Description
+
+int16_t
+
+Weak_control_limit_value
+
+Weak control mode voltage limit
+range (10-50, divided by 10 for
+actual value, precision to 1
+decimal)
+
+int16_t
+
+Voltage_threshold
+
+Voltage threshold (20-50, divided
+by 10 for actual value, precision
+to 1 decimal)
+
+int16_t
+
+Angular_error_threshold
+
+Angular error threshold (30-300,
+divided by 10 for actual value,
+precision to 1 decimal)
+
+ACK Data Format
+
+Note: The control threshold data is the actual threshold value after dividing by 10, with a
+precision of 1 decimal place.
+This command is only available for ArduPilot debugging and is not supported by other
+systems.
+
+0x29：Request Gimbal Motor Voltage Data
+CMD_ID:0x29------Request Gimbal Motor Voltage Data
+
+Send Data Format
+No.
+
+Data
+Type
+
+Data Name
+
+Description
+
+int16_t
+
+Weak_control_limit_value
+
+Yaw motor voltage (divided by
+1000 for actual value, precision to
+3 decimal)
+
+34 / 110
+
+int16_t
+
+Voltage_threshold
+
+Pitch motor voltage (divided by
+1000 for actual value, precision to
+3 decimal)
+
+int16_t
+
+Angular_error_threshold
+
+Roll motor voltage (divided by
+1000 for actual value, precision to
+3 decimal)
+
+sta
+
+1: Success, 0: Failure
+
+ACK Data Format
+uint8_t
+
+Note: The control threshold data is the actual threshold value after dividing by 10,
+with a precision of 1 decimal place.
+This command is only available for ArduPilot debugging and is not supported by
+other systems.
+
+0x2A：Request Gimbal Motor Voltage Data
+CMD_ID:0x2A------Request Gimbal Motor Voltage Data
+
+Send Data Format
+No.
+
+Data Type
+
+Data Name
+
+Description
+
+int16_t
+
+yaw_voltage
+
+Yaw motor voltage
+
+int16_t
+
+pitch _voltage
+
+Pitch motor voltage
+
+int16_t
+
+roll_voltage
+
+Roll motor voltage
+
+ACK Data Format
+
+Note: The above data is the actual voltage after dividing by 1000, with a precision of
+3 decimal places.
+Note: It is recommended to use the 0x25 command to set the motor voltage data
+transmission frequency, allowing continuous sending at the specified frequency.
+
+0x30：Set UTC Time
+CMD_ID:0x 30 -----Set UTC Time
+35 / 110
+
+Send Data Format
+No.
+
+Data Type
+
+Data Name
+
+Description
+
+1
+
+uint64_t
+
+Timestamp
+
+UNIX epoch time(us)
+
+ACK Data Format
+1
+
+int8_t
+
+ack
+
+1: Success
+0: Invalid time format
+
+0x31：Request Gimbal System Information
+CMD_ID:0x 31 -----Request gimbal board information
+
+Send Data Format
+No.
+
+Data Type
+
+Name
+
+Description
+
+ACK Data Format
+1
+
+Uint8_t
+
+laser_state
+
+1: Laser ranging enabled,
+0: Laser ranging disabled
+
+0x32：Set Laser Ranging State
+CMD_ID:0x 32 -----Set laser ranging state
+
+Send Data Format:
+No.
+
+Data Type
+
+Name
+
+1
+
+Uint8_t
+
+laser_state
+
+Description
+1: Laser ranging enabled
+0: Laser ranging disabled
+
+ACK Data Format
+1
+
+Uint8_t
+
+Sta
+
+1: Setting successful
+36 / 110
+
+0: Setting failed
+
+0x33：Request Thermal Imaging Output Mode
+CMD_ID:0x 33 -----Request thermal imaging output mode
+
+Send Data Format
+No.
+
+Data Type
+
+Name
+
+Description
+
+mode
+
+0: 30fps, 1: 25fps + Temperature frame
+output
+
+ACK Data Format
+1
+
+uint8_t
+
+0x34：Set Thermal Imaging Output Mode
+CMD_ID:0x 34 -----Set thermal imaging output mode
+
+Send Data Format
+No.
+
+Data Type
+
+Name
+
+Description
+
+1
+
+uint8_t
+
+mode
+
+0: 30fps, 1: 25fps + Temperature frame
+output
+
+mode
+
+0: 30fps, 1: 25fps + Temperature frame
+output
+
+ACK Data Format
+1
+
+uint8_t
+
+0x35：Obtain a Single Temperature Frame
+CMD_ID:0x 35 -----Obtain a single temperature frame
+
+Send Data Format
+No.
+
+Data Type
+
+Name
+
+Description
+
+ACK Data Format
+37 / 110
+
+1
+
+uint8_t
+
+ack
+
+1: Acquisition successful
+
+0x37：Request Thermal Imaging Gain Mode
+CMD_ID:0x 37 -----Request thermal imaging gain mode
+
+Send Data Format
+No.
+
+Data Type
+
+Name
+
+Description
+
+Ir_gain
+
+0: Low gain, 1: High gain
+
+ACK Data Format
+1
+
+uint8_t
+
+0x38：Set Thermal Imaging Gain Mode
+CMD_ID:0x 38 -----Set thermal imaging gain mode
+
+Send Data Format
+No.
+
+Data Type
+
+Name
+
+Description
+
+1
+
+uint8_t
+
+Ir_gain
+
+0: Low gain, 1: High gain
+
+Ir_gain
+
+0: Low gain, 1: High gain
+
+ACK Data Format
+1
+
+uint8_t
+
+0x39：Request Thermal Imaging Environmental Correction Parameters
+CMD_ID:0x 39 -----Retrieve thermal imaging environmental correction parameters
+
+Send Data Format
+No.
+
+Data Type
+
+Data Name
+
+Description
+
+38 / 110
+
+ACK Data Format
+1
+
+uint16_t
+
+Dist
+
+Distance (unit: m)
+
+2
+
+uint16_t
+
+Ems
+
+Target emissivity (%)
+
+3
+
+uint16_t
+
+Hum
+
+Environmental humidity (%)
+
+4
+
+uint16_t
+
+Ta
+
+Atmospheric temperature (unit: °C)
+
+5
+
+uint16_t
+
+Tu
+
+Reflective temperature (unit: °C)
+
+All parameters in this protocol are divided by 100 and retain two decimal places.
+
+0x3A：Set Thermal Imaging Environmental Correction Parameters
+CMD_ID:0x 3A -----Set thermal imaging environmental correction parameters
+
+Send Data Format
+No.
+
+Data Type
+
+Data Name
+
+Description
+
+1
+
+uint16_t
+
+Dist
+
+Distance (unit: m)
+
+2
+
+uint16_t
+
+Ems
+
+Target emissivity (%)
+
+3
+
+uint16_t
+
+Hum
+
+Environmental humidity (%)
+
+4
+
+uint16_t
+
+Ta
+
+Atmospheric temperature (unit: °C)
+
+5
+
+uint16_t
+
+Tu
+
+Reflective temperature (unit: °C)
+
+ack
+
+1: Successfully set
+
+ACK Data Format
+1
+
+uint8_t
+
+All parameters in this protocol are divided by 100 and retain two decimal places.
+
+0x3B：Request Thermal Imaging Environmental Correction Switch
+CMD_ID:0x 3B -----Request thermal imaging environmental correction switch
+
+Send Data Format
+No.
+
+Data Type
+
+Data Name
+
+Description
+39 / 110
+
+ACK Data Format
+1
+
+uint8_t
+
+EnvCorrect
+
+0: Off, 1: On
+
+0x3C：Set Thermal Imaging Environmental Correction Switch
+CMD_ID:0x 3C -----Set thermal imaging environmental correction switch
+
+Send Data Format
+No.
+
+Data Type
+
+Data Name
+
+Description
+
+1
+
+uint8_t
+
+EnvCorrect
+
+0: Off, 1: On
+
+EnvCorrect
+
+0: Off, 1: On
+
+ACK Data Format
+1
+
+uint8_t
+
+0x3E：Send Raw GPS Data to Gimbal
+CMD_ID:0x 3E-----Send raw GPS data to the gimbal
+Send Data Format
+No.
+
+Data Type
+
+Data Name
+
+Date Description
+
+1
+
+uint32_t
+
+time_boot_ms
+
+[ms]time since boot
+
+2
+
+int32_t
+
+lat
+
+[degE7]Latitude
+
+3
+
+int32_t
+
+lon
+
+[degE7]Longitude
+
+4
+
+int32_t
+
+alt
+
+[cm]Altitude (MSL)
+
+5
+
+int32_t
+
+alt_ellipsoid
+
+[cm]Altitude (above WGS84, EGM96 ellipsoid). Positive
+for up.
+
+6
+
+int32_t
+
+vn
+
+[m E3/s] X Speed
+
+7
+
+int32_t
+
+ve
+
+[m E3/s] Y Speed
+
+8
+
+int32_t
+
+vd
+
+[m E3/s] Z Speed
+
+ACK Data Format
+40 / 110
+
+0x40：Request System Time
+CMD_ID:0x 40 -----Request system time
+
+Send Data Format
+No.
+
+Data Type
+
+Data Name
+
+Description
+
+ACK Data Format
+1
+
+uint64_t
+
+time_unix_usec
+
+Timestamp (UNIX epoch time, unit: µs).
+
+2
+
+uint32_t
+
+time_boot_ms
+
+Timestamp (time since system startup,
+unit: ms).
+
+0x41：Single-Axis Attitude Control
+CMD_ID:0x41------Set Gimbal Single-Axis Attitude Angle
+Send Data Format
+
+Sequence Data Type
+
+Data Name
+
+Data Description
+
+int16_t
+
+angle
+
+The target angle to be set
+
+uint8_t
+
+single_control_flag Angle to control: 0 for yaw, 1 for pitch
+
+ACK Data Format
+int16_t
+
+yaw
+
+Current yaw angle
+
+int16_t
+
+pitch
+
+Current pitch angle
+
+int16_t
+
+roll
+
+Current roll angle
+
+Angle Control Range:
+Yaw:
+A8 mini: -135.0° to 135.0°
+Pitch:
+A8 mini: -90.0° to 25.0°
+41 / 110
+
+Notes:
+Angle precision is 1 decimal place. For example, if you want to set yaw to 60.5°, the yaw
+field should be set to 605.
+
+The returned actual angle is divided by 10, with 1 decimal place precision.
+
+0x42：Request Thermal Imaging Threshold Range Switch
+CMD_ID:0x42------ CMD_ID_EX_SDK_GET_IR_THRESH_MAP_STA
+Send Data Format
+
+Sequenc
+e
+
+Data Type
+
+Data Name
+
+Data Description
+
+ir_thresh_sta
+
+0: Off, 1: On
+
+ACK Data Format
+1
+
+uint8_t
+
+0x43：Set thermal imaging threshold image switch state
+CMD_ID:0x 43 ----- CMD_ID_EX_SDK_SET_IR_THRESH_MAP_STA
+Send data format
+Serial
+Number
+
+data type
+
+Data name
+
+Data Description
+
+1
+
+uint8_t
+
+ir_thresh_sta
+
+0：close 1：open
+
+ir_thresh_sta
+
+0：close 1：open
+
+ACK data format
+1
+
+uint8_t
+
+0x44：Request thermal imaging threshold image parameters
+CMD_ID:0x 44 ----- CMD_ID_EX_SDK_GET_IR_THRESH_PARAM
+42 / 110
+
+Send data format
+Serial
+Number
+
+data type
+
+Data name
+
+Data Description
+
+ACK data format
+1
+
+uint8_t
+
+Thresh1_switch
+
+0：threshold region 1 hide 1：threshold region
+1 display
+
+2
+
+Int16_t[2]
+
+Thresh1_temp
+
+Minimum and maximum temperatures in
+threshold region 1(Minimum always first)
+
+3
+
+uint8_t[3]
+
+Thresh1_color
+
+The color (RGB) of the threshold region 1
+
+4
+
+uint8_t
+
+Thresh2_switch
+
+0：threshold region 2 hide 1：threshold region
+2 display
+
+5
+
+Int16_t[2]
+
+Thresh2_temp
+
+Minimum and maximum temperatures in
+threshold region 2(Minimum always first)
+
+6
+
+uint8_t[3]
+
+Thresh2_ color
+
+The color (RGB) of the threshold region 2
+
+7
+
+uint8_t
+
+Thresh3_switch
+
+0：threshold region 3 hide 1：threshold region
+3 display
+
+8
+
+Int16_t[2]
+
+Thresh3_temp
+
+Minimum and maximum temperatures in
+threshold region 3(Minimum always first)
+
+9
+
+uint8_t[3]
+
+Thresh3_ color
+
+The color (RGB) of the threshold region 3
+
+0x45：Set thermal imaging threshold image parameters
+CMD_ID:0x 45 ----- CMD_ID_EX_SDK_SET_IR_THRESH_PARAM
+Send data format
+Serial
+Number
+
+Serial
+Number
+
+Serial Number
+
+Serial Number
+
+1
+
+uint8_t
+
+Thresh1_switch
+
+0：threshold region 1 hide 1：threshold region
+1 display
+
+2
+
+Int16_t[2]
+
+Thresh1_temp
+
+Minimum and maximum temperatures in
+threshold region 1(Minimum always first)
+
+3
+
+uint8_t[3]
+
+Thresh1_color
+
+The color (RGB) of the threshold region 1
+
+4
+
+uint8_t
+
+Thresh2_switch
+
+0：threshold region 2 hide 1：threshold region
+2 display
+
+5
+
+Int16_t[2]
+
+Thresh2_temp
+
+Minimum and maximum temperatures in
+43 / 110
+
+threshold region 2(Minimum always first)
+6
+
+uint8_t[3]
+
+Thresh2_ color
+
+The color (RGB) of the threshold region 2
+
+7
+
+uint8_t
+
+Thresh3_switch
+
+0：threshold region 3 hide 1：threshold region
+3 display
+
+8
+
+Int16_t[2]
+
+Thresh3_temp
+
+Minimum and maximum temperatures in
+threshold region 3(Minimum always first)
+
+9
+
+uint8_t[3]
+
+Thresh3_ color
+
+The color (RGB) of the threshold region 3
+
+ack
+
+1：success
+
+ACK data format
+1
+
+uint8_t
+
+0x46：Request Thermal imaging threshold precision
+CMD_ID:0x 46 ----- CMD_ID_EX_SDK_GET_IR_THRESH_PRECISION
+Send data format
+Serial
+Number
+
+Serial
+Number
+
+Serial Number
+
+Serial Number
+
+precision
+
+1: max accurate,2:mid accurate,3:min
+accurate
+
+ACK data format
+1
+
+uint8_t
+
+0x47：Set Thermal imaging threshold precision
+CMD_ID:0x 47 ----- CMD_ID_EX_SDK_SET_IR_THRESH_PRECISION
+Send data format
+Serial
+Number
+
+Serial
+Number
+
+Serial Number
+
+Serial Number
+
+1
+
+uint8_t
+
+precision
+
+1: max accurate,2:mid accurate,3:min
+accurate
+
+precision
+
+1: max accurate,2:mid accurate,3:min
+accurate
+
+ACK data format
+1
+
+uint8_t
+
+44 / 110
+
+0x48：Format SD Card
+CMD_ID:0x 48 ----- CMD_ID_EX_SDK_SD_FORMAT
+
+Send Data Format
+Index
+
+Data Type
+
+Data Name
+
+Description
+
+1
+
+uint8_t
+
+format_sta
+
+0: Format failed, 1: Format successful
+
+format_sta
+
+0: Format failed, 1: Format successful
+
+ACK Data Format
+1
+
+uint8_t
+
+0x49：get_picture_name_type
+CMD_ID:0x 49 ----- CMD_ID_EX_SDK_GET_PIC_NAME_TYPE
+Send data format
+index
+
+Date type
+
+Date name
+
+Description
+
+1
+
+uint8_t
+
+File_type
+
+0: picture 1: temp raw file 2:record video
+
+ACK data format
+1
+
+uint8_t
+
+File_type
+
+0: picture 1: temp raw file 2: record video
+
+2
+
+uint8_t
+
+File_name_type
+
+0: reserve 1: index 2: time stamp
+
+0x4A：set_picture_name_type
+CMD_ID:0x 4A ----- CMD_ID_EX_SDK_GET_PIC_NAME_TYPE
+Send data format
+index
+
+Date type
+
+Date name
+
+Description
+
+1
+
+uint8_t
+
+File_type
+
+0: picture 1: temp raw file 2: record video
+
+1
+
+uint8_t
+
+File_name_type
+
+0: reserve 1: index 2: time stamp
+
+File_type
+
+0: picture 1: temp raw file 2: record video
+
+ACK data format
+1
+
+uint8_t
+
+45 / 110
+
+1
+
+uint8_t
+
+File_name_type
+
+0: reserve 1: index 2: time stamp
+
+0x4B：Request HDMI OSD Display Status
+CMD_ID:0x 4B ----- CMD_ID_EX_SDK_GET_MAVLINK_OSD_FLAG
+
+Send Data Format
+Index
+
+Data Type
+
+Data Name
+
+Description
+
+Osd_sta
+
+0: Off, 1: On
+
+ACK Data Format
+1
+
+uint8_t
+
+0x4C：Set HDMI OSD Display Status
+CMD_ID:0x 4C ----- CMD_ID_EX_SDK_SET_MAVLINK_OSD_FLAG
+
+Send Data Format
+Index
+
+Data Type
+
+Data Name
+
+Description
+
+1
+
+uint8_t
+
+Osd_sta
+
+0: Off, 1: On
+
+Osd_sta
+
+0: Off, 1: On
+
+ACK Data Format
+1
+
+uint8_t
+
+0x4D：Get AI Mode Status
+[The camera itself cannot enable AI mode; an AI module is required to activate it.]
+CMD_ID:0x4D------Get AI Module Tracking Target Coordinate Stream Status
+
+Send Data Format
+Index
+
+Data Type
+
+Data Name
+
+Description
+46 / 110
+
+ACK Data Format
+1
+
+uint8_t
+
+sta
+
+0: Not enabled, 1: AI mode
+enabled
+
+0x4E：Get AI Module Tracking Target Coordinate Stream Status
+CMD_ID:0x4E------Get AI Module Tracking Target Coordinate Stream Status
+Send Data Format
+
+Index
+
+Data
+Type
+
+Data Name
+
+Description
+
+ACK Data Format
+0: Not enabled
+1
+
+uint8_t
+
+sta
+
+1: Outputting coordinate stream
+2: AI recognition not enabled 3:
+AI tracking target not enabled
+
+0x50：AI Module Target Tracking Coordinate Stream
+[Automatically sent when set by CMD 0x4F, no request needed.]
+[Origin is at the center of the recognition box, pixel coordinates are based on a width
+of 1280 and height of 720.]
+CMD_ID:0x50------AI Module Target Tracking Coordinate Stream
+Send Data Format
+
+47 / 110
+
+Index
+
+Data
+Type
+
+Data Name
+
+Description
+
+ACK Data Format:
+1
+
+uint16_t
+
+pos_x
+
+Target tracking coordinate X
+
+2
+
+uint16_t
+
+pos_y
+
+Target tracking coordinate Y
+
+3
+
+uint16_t
+
+pos_width
+
+Target tracking box width
+
+4
+
+uint16_t
+
+pos_height
+
+Target tracking box height
+Target Type ID
+
+0: Human
+5
+
+uint8_t
+
+Target_ID
+
+1: Car
+2: Bus
+3: Truck
+255: Any object
+Tracking Status
+0: Normal tracking (AI)
+
+6
+
+uint8_t
+
+Track_Sta
+
+1: Intermittent loss (can recover)
+2: Lost
+3: User canceled tracking
+4: Normal tracking (any object)
+
+0x51：Set AI Module Tracking Coordinate Stream Status
+[The rate is the frame rate of the video stream and cannot be modified.]
+CMD_ID:0x51------AI Module Tracking Coordinate Stream Status
+
+Send Data Format
+Index
+
+Data
+Type
+
+Data Name
+
+Description
+
+uint8_t
+
+track_action
+
+1: Enable output 0: Disable output
+48 / 110
+
+ACK Data Format
+1
+
+uint8_t
+
+1: Output enabled 0: Output
+disabled
+
+sta
+
+0x4F：Manually Update Thermal Imaging Shutter
+CMD_ID:0x4F------Manually Update Thermal Imaging Shutter
+
+Send Data Format
+Index
+
+Data
+Type
+
+Data Name
+
+Description
+
+ack
+
+1: Update successful
+
+ACK Data Format:
+1
+
+Uint8_t
+
+0x70：Request Weak Control Mode
+CMD_ID:0x 70 -----Request Weak Control Mode
+
+Send Data Format
+Index
+
+Data Type
+
+Data Name
+
+Description
+
+ACK Data Format
+1
+
+Uint8_t
+
+Weak_mode__st
+ate
+
+1: Weak mode enabled
+0: Weak mode disabled
+
+0x71：Set Weak Control Mode
+CMD_ID:0x 71 -----Set Weak Control Mode
+
+Send Data Format
+Index
+
+Data Type
+
+Data Name
+
+Description
+
+49 / 110
+
+1
+
+Uint8_t
+
+Weak_mode__st
+ate
+
+1: Enable weak mode
+0: Disable weak mode
+
+ACK Data Format
+1
+
+Uint8_t
+
+Sta
+
+2
+
+Uint8_t
+
+Weak_mode__st
+ate
+
+1: Success
+0: Failure
+1: Weak mode enabled
+0: Weak mode disabled
+
+0x80：Gimbal Camera Soft Reboot
+CMD_ID:0x 80 -----Gimbal Camera Soft Reboot
+
+Send Data Format
+Index
+
+Data Type
+
+Data Name
+
+Description
+
+1
+
+uint8_t
+
+Camera_reboot
+
+0: No action, 1: Camera reboot
+
+2
+
+uint8_t
+
+Gimbal_reset
+
+0: No action, 1: Gimbal reboot
+
+ACK 数据格式
+1
+
+uint8_t
+
+Camera_reboot_sta
+
+0: No action, 1: Camera reboot
+
+2
+
+uint8_t
+
+Gimbal_reset_sta
+
+0: No action, 1: Gimbal reboot
+
+0x81：Get Gimbal Camera IP Address
+CMD_ID:0x 81 -----Get Gimbal Camera IP Address
+
+Send Data Format
+Index
+
+Data Type
+
+Data Name
+
+Description
+
+IP
+
+IP Address
+
+ACK Data Format
+1
+
+uint32_t
+
+50 / 110
+
+2
+
+uint32_t
+
+Mask
+
+Subnet Mask
+
+3
+
+uint32_t
+
+Gateway
+
+Gateway
+
+0x82：Set Gimbal Camera IP Address
+CMD_ID:0x 82 -----Set Gimbal Camera IP Address
+Send Data Format
+
+Index
+
+Data Type
+
+Data Name
+
+Description
+
+1
+
+uint32_t
+
+IP
+
+IP Address
+
+2
+
+uint32_t
+
+Mask
+
+Subnet Mask
+
+3
+
+uint32_t
+
+Gateway
+
+Gateway
+
+Ack
+
+1: Successfully Set
+
+ACK Data Format
+1
+
+uint8_t
+
+51 / 110
+
+CHAPTER 3 Communication Interfaces
+1. TTL Serial Port
+Baud Rate: 115200
+Data Bits: 8 bits
+Stop Bits: 1 bit
+Parity: None
+
+2. UDP Communication
+IP Address: 192.168.144.25
+Port: 37260
+
+3. TCP Communication
+IP Address: 192.168.144.25
+Port: 37260
+Heartbeat Packet: 55 66 01 01 00 00 00 00 00 59 8B
+
+52 / 110
+
+CHAPTER 4 Communication Data Example
+zoom 1
+55 66 01 01 00 00 00 05 01 8d 64
+
+zoom -1
+55 66 01 01 00 00 00 05 FF 5c 6a
+
+Absolute Zoom (4.5x)
+55 66 01 02 00 01 00 0F 04 05 60 BB
+
+focus 1
+55 66 01 01 00 00 00 06 01 de 31
+
+Take Photo
+55 66 01 01 00 00 00 0c 00 34 ce
+
+Start Video Recording
+55 66 01 01 00 00 00 0c 02 76 ee
+
+Pan/Tilt 100 100
+55 66 01 02 00 00 00 07 64 64 3d cf
+
+Auto Focus
+55 66 01 05 00 00 00 04 01 2c 01 64 00 1f 8a
+
+focus -1
+55 66 01 01 00 00 00 06 ff 0f 3f
+
+One-Key Centering
+
+53 / 110
+
+55 66 01 01 00 00 00 08 01 d1 12
+
+Gimbal Status Information
+55 66 01 00 00 00 00 0a 0f 75
+
+Retrieve Hardware ID
+55 66 01 00 00 00 00 02 07 f4
+
+Retrieve Firmware Version
+55 66 01 00 00 00 00 01 64 c4
+
+Lock Mode
+55 66 01 01 00 00 00 0c 03 57 fe
+
+Follow Mode
+55 66 01 01 00 00 00 0c 04 b0 8e
+
+FPV Mode
+55 66 01 01 00 00 00 0c 05 91 9e
+
+Retrieve Attitude Data
+55 66 01 00 00 00 00 0d e8 05
+
+Set Gimbal Control Angle (-90°, 0°) (Facing Down)
+55 66 01 04 00 00 00 0E 00 00 7C FC 4F A4
+
+Set HDMI Video Output (A8 Mini Supported, Takes Effect After Restart)
+55 66 01 01 00 00 00 0c 06 f2 ae
+
+54 / 110
+
+Set CVBS Video Output (A8 Mini Supported, Takes Effect After Restart)
+55 66 01 01 00 00 00 0c 07 d3 be
+
+Disable CVBS and HDMI Output (A8 Mini Supported, Takes Effect After Restart)
+55 66 01 01 00 00 00 0c 08 3c 4f
+
+Retrieve Current Video Stitching Mode
+55 66 01 00 00 00 00 10 74 c6
+
+Set Current Video Stitching Mode
+55 66 01 01 00 00 00 11 01 3a ab
+
+Retrieve Temperature at a Specific Point
+55 66 01 05 00 00 00 12 00 00 00 00 01 a8 2f
+
+Retrieve Maximum and Minimum Temperatures of Entire Image with
+Coordinates
+55 66 01 01 00 00 00 14 01 cf 54
+
+Read Laser Ranging Distance (Low Byte First, High Byte Last, Supported by
+Four-Sensor Gimbal)
+55 66 01 00 00 00 00 15 D1 96
+
+Retrieve Maximum Zoom Value in Current State
+55 66 01 00 00 00 00 16 B2 A6
+
+Retrieve Current Zoom Value
+55 66 01 00 00 00 00 18 7C 47
+
+Retrieve Current Gimbal Mode
+55 66 01 00 00 00 00 19 5D 57
+
+Retrieve Pseudo-Color Settings
+55 66 01 00 00 00 00 1A 3e 67
+55 / 110
+
+Set Pseudo-Color Mode (Iron Red)
+55 66 01 01 00 00 00 1B 03 b3 64
+
+Retrieve Camera Encoding Parameters
+55 66 01 01 00 00 00 20 00 BF 8D
+
+Set Camera Encoding Parameters: Main Stream HD H.265 Bitrate 1.5M
+55 66 01 09 00 00 00 21 01 02 00 05 d0 02 dc 05 00 58 45
+
+Set Camera Encoding Parameters: Main Stream Ultra HD H.265 Bitrate 2.0M
+55 66 01 09 00 00 00 21 01 02 80 07 38 04 d0 07 00 5a 68
+
+Set Recording Stream 2K Resolution H.265 Bitrate 15M
+55 66 01 09 00 00 00 21 00 02 00 0a a0 05 98 3a 00 15 f3
+
+Set Recording Stream 4K Resolution H.265 Bitrate 15M
+55 66 01 09 00 00 00 21 00 02 00 0f 70 08 98 3a 00 70 be
+
+Request Thermal Imaging Output Mode
+55 66 01 00 00 00 00 33 75 d2
+
+Set Thermal Imaging Output Mode
+55 66 01 01 00 00 00 34 01 29 52
+
+Retrieve Single Frame of Raw Thermal Imaging Data
+55 66 01 00 00 00 00 35 b3 b2
+
+Send GPS Coordinates (Longitude 22.27683°E, Latitude 114.17612°N)
+55 66 01 20 00 01 00 3e 00 00 00 00 ac 2c 47 0d b0 e4 0d 44 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 80 62
+
+56 / 110
+
+CHAPTER 4 CRC16 Checksum
+const uint16_t crc16_tab[256];
+/***********************************************************
+CRC16 Coding & Decoding G(X) = X^16+X^12+X^5+1
+***********************************************************/
+uint16_t CRC16_cal(uint8_t *ptr, uint32_t len, uint16_t crc_init)
+{
+uint16_t crc,
+
+oldcrc16;
+
+uint8_t temp;
+crc = crc_init;
+while (len--!=0)
+{
+temp=(crc>>8)&0xff;
+oldcrc16=crc16_tab[*ptr^temp];
+crc=(crc<<8)^oldcrc16;
+ptr++;
+
+}
+//crc=~crc;
+
+//??
+
+return(crc);
+}
+
+uint8_t crc_check_16bites(uint8_t* pbuf, uint32_t len,uint32_t* p_result)
+{
+uint16_t crc_result = 0;
+crc_result= CRC16_cal(pbuf,len, 0);
+*p_result = crc_result;
+
+return 2;
+57 / 110
+
+}
+
+const uint16_t crc16_tab[256]= {0x0,0x1021,0x2042,0x3063,0x4084,0x50a5,0x60c6,0x70e7,
+0x8108,0x9129,0xa14a,0xb16b,0xc18c,0xd1ad,0xe1ce,0xf1ef,
+0x1231,0x210,0x3273,0x2252,0x52b5,0x4294,0x72f7,0x62d6,
+0x9339,0x8318,0xb37b,0xa35a,0xd3bd,0xc39c,0xf3ff,0xe3de,
+0x2462,0x3443,0x420,0x1401,0x64e6,0x74c7,0x44a4,0x5485,
+0xa56a,0xb54b,0x8528,0x9509,0xe5ee,0xf5cf,0xc5ac,0xd58d,
+0x3653,0x2672,0x1611,0x630,0x76d7,0x66f6,0x5695,0x46b4,
+0xb75b,0xa77a,0x9719,0x8738,0xf7df,0xe7fe,0xd79d,0xc7bc,
+0x48c4,0x58e5,0x6886,0x78a7,0x840,0x1861,0x2802,0x3823,
+0xc9cc,0xd9ed,0xe98e,0xf9af,0x8948,0x9969,0xa90a,0xb92b,
+0x5af5,0x4ad4,0x7ab7,0x6a96,0x1a71,0xa50,0x3a33,0x2a12,
+0xdbfd,0xcbdc,0xfbbf,0xeb9e,0x9b79,0x8b58,0xbb3b,0xab1a,
+0x6ca6,0x7c87,0x4ce4,0x5cc5,0x2c22,0x3c03,0xc60,0x1c41,
+0xedae,0xfd8f,0xcdec,0xddcd,0xad2a,0xbd0b,0x8d68,0x9d49,
+0x7e97,0x6eb6,0x5ed5,0x4ef4,0x3e13,0x2e32,0x1e51,0xe70,
+0xff9f,0xefbe,0xdfdd,0xcffc,0xbf1b,0xaf3a,0x9f59,0x8f78,
+0x9188,0x81a9,0xb1ca,0xa1eb,0xd10c,0xc12d,0xf14e,0xe16f,
+
+58 / 110
+
+0x1080,0xa1,0x30c2,0x20e3,0x5004,0x4025,0x7046,0x6067,
+0x83b9,0x9398,0xa3fb,0xb3da,0xc33d,0xd31c,0xe37f,0xf35e,
+0x2b1,0x1290,0x22f3,0x32d2,0x4235,0x5214,0x6277,0x7256,
+0xb5ea,0xa5cb,0x95a8,0x8589,0xf56e,0xe54f,0xd52c,0xc50d,
+0x34e2,0x24c3,0x14a0,0x481,0x7466,0x6447,0x5424,0x4405,
+0xa7db,0xb7fa,0x8799,0x97b8,0xe75f,0xf77e,0xc71d,0xd73c,
+0x26d3,0x36f2,0x691,0x16b0,0x6657,0x7676,0x4615,0x5634,
+0xd94c,0xc96d,0xf90e,0xe92f,0x99c8,0x89e9,0xb98a,0xa9ab,
+0x5844,0x4865,0x7806,0x6827,0x18c0,0x8e1,0x3882,0x28a3,
+0xcb7d,0xdb5c,0xeb3f,0xfb1e,0x8bf9,0x9bd8,0xabbb,0xbb9a,
+0x4a75,0x5a54,0x6a37,0x7a16,0xaf1,0x1ad0,0x2ab3,0x3a92,
+0xfd2e,0xed0f,0xdd6c,0xcd4d,0xbdaa,0xad8b,0x9de8,0x8dc9,
+0x7c26,0x6c07,0x5c64,0x4c45,0x3ca2,0x2c83,0x1ce0,0xcc1,
+0xef1f,0xff3e,0xcf5d,0xdf7c,0xaf9b,0xbfba,0x8fd9,0x9ff8,
+0x6e17,0x7e36,0x4e55,0x5e74,0x2e93,0x3eb2,0xed1,0x1ef0
+};
+
+59 / 110
+
+CHAPTER 6 Advanced Integration Guide
+for SIYI Gimbal SDK
+To assist developers, especially those working on Linux platforms, in developing and
+debugging the SIYI Gimbal SDK, we have created this demo example.
+
+Note：
+Before using this document, please make sure to read Chapters 1 to 5 of the manual in
+full.
+
+This document uses the UDP communication protocol:
+1.Refer to Chapter 4 "SDK Communication Data Examples" in this manual, and fill
+the corresponding example in hexadecimal format into "send_buff" as
+needed.
+
+2.Modify the gimbal camera's port number and IP address to match your
+corresponding settings, ensuring that the double quotes around the IP address are
+retained.
+
+3.Create a socket keyword.
+
+60 / 110
+
+4.Send data to the gimbal camera without modification.
+
+5.Receive data returned by the gimbal camera without modification.
+
+6.Print the received data in hexadecimal format without modification.
+
+7. Following the steps above, compile and run the SDK. The following printed data
+
+will appear, indicating that the data can be sent and received correctly. At this point,
+please observe whether the gimbal camera performs the corresponding actions.
+
+61 / 110
+
+Note:
+When using the SDK for UDP communication with the gimbal camera, ensure that
+the device and the gimbal camera are on the same network segment, meaning the
+Ubuntu system should be able to ping the gimbal camera's IP address.
+If communication still cannot be established, it is possible that the Windows firewall
+is interfering with the data transmission. Try temporarily disabling the Windows
+firewall.
+
+Related code example:
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+
+#define RECV_BUUF_SIZE
+
+64
+
+#define SERVER_PORT
+
+37260
+
+// Gimbal Camera (Server) Port
+
+#define SERVER_IP
+
+"192.168.144.25"
+
+// Gimbal Camera (Server) IP
+
+int main(int argc, char *argv[])
+62 / 110
+
+{
+int sockfd;
+int ret, i, recv_len;
+struct sockaddr_in send_addr, recv_addr;
+unsigned char send_buf[] = {0x55, 0x66, 0x01, 0x01, 0x00, 0x00, 0x00, 0x08, 0x01,
+0xd1, 0x12}; // Frame protocol corresponding to functionality, hexadecimal data
+unsigned char recv_buf[RECV_BUUF_SIZE] = {0};
+
+/* Create a UDP socket
+AF_INET:
+
+IPv4 address
+
+SOCK_DGRAM: UDP protocol
+0:
+
+Automatically select the corresponding default protocol
+
+*/
+if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+perror("socket");
+exit(1);
+}
+
+/* Set the IP address and port number of the gimbal camera
+sin_family:
+
+IPv4 address
+
+sin_addr.s_addr: Gimbal camera IP address
+sin_port:
+
+Gimbal camera port number
+
+*/
+memset(&send_addr, 0, sizeof(send_addr));
+send_addr.sin_family = AF_INET;
+send_addr.sin_addr.s_addr = inet_addr(SERVER_IP);
+send_addr.sin_port = htons(SERVER_PORT);
+
+/* Send frame data
+sockfd:
+
+Socket file descriptor
+63 / 110
+
+send_buf:
+
+The starting address of the data to be sent in memory
+
+sizeof(send_buf): Length of the data to be sent
+0:
+
+Send flag, usually 0
+
+(struct sockaddr *)&send_addr: Structure pointer of the data receiving end’s
+address (including IP address and port number)
+addr_len:
+
+Size of the data receiving end address structure
+
+*/
+printf("Send HEX data\n");
+socklen_t addr_len = sizeof(struct sockaddr_in);
+if (sendto(sockfd, send_buf, sizeof(send_buf), 0, (struct sockaddr *)&send_addr,
+addr_len) < 0) {
+perror("sendto");
+exit(1);
+}
+
+/* Receive the returned data from the gimbal camera
+sockfd:
+
+Socket file descriptor
+
+recv_buf:
+
+Memory location where the received data will be stored
+
+RECV_BUUF_SIZE: Size of the buffer, i.e., the expected maximum data length
+0:
+
+Receive flag, usually 0
+
+(struct sockaddr *)&recv_addr: Structure that will be filled with the sending end’s
+address (including IP and port)
+the call
+
+&addr_len:
+
+The location to store the actual size of the sender's address after
+
+*/
+recv_len = recvfrom(sockfd, recv_buf, RECV_BUUF_SIZE, 0, (struct sockaddr
+*)&recv_addr, &addr_len);
+if (recv_len < 0) {
+perror("recvfrom");
+exit(1);
+}
+
+64 / 110
+
+// Print the received data in hexadecimal form
+printf("Received HEX data: ");
+for (int i = 0; i < recv_len; i++) {
+printf("%02x ", recv_buf[i]);
+}
+printf("\n");
+
+// Close the socket
+close(sockfd);
+
+return 0;
+}
+
+65 / 110
+
+CHAPTER 7 Interface Documentation for SIYI
+Gimbal Camera’s Web Server
+Videos and images stored in SIYI gimbal camera can be acquired directly
+from the web server interface.
+Interface
+baseUrl: http://192.168.144.25:82//cgi-bin/media.cgi
+A Request File Directory
+
+The below interface is to request the directory of the file format for an easy overview.
+URL: /api/v1/getdirectories
+Method: GET
+
+Request Data
+Data Name
+
+Type
+
+media_type
+
+int
+
+Description
+0: Images
+1: Videos
+
+Response Data
+The format of the response data is below:
+
+{
+
+"code": 200, // Status code.
+"data": {}, // Content of the data.
+"success": true, // If the request is successful.
+66 / 110
+
+}
+
+"message": "" // Error message if the request is failed.
+
+The definition of data is below:
+Data Name
+
+Type
+
+media_type
+
+int
+
+Description
+0: Images
+1: Videos
+
+[
+{
+"name": "aa",
+"path": "/yyy/aa"
+directories
+
+},
+{
+
+File directory
+
+"name": "bb",
+"path": "/yyy/bb"
+},
+]
+
+Request Example
+Request the number of all the images:
+
+{
+}
+
+"media_type": 0
+
+Successful Response
+Condition: Request data is legal.
+Status Code: 200 OK
+Response Example:
+File directory after response:
+
+67 / 110
+
+{
+
+}
+
+"code": 200,
+"data": {
+"media_type": 0,
+"directories": [
+{
+"name": "aa",
+"path": "photo/aa"
+},
+{
+"name": "bb",
+"path": "photo/bb"
+}
+]
+}
+"success": true
+
+Error Response
+Condition: Request data is illegal. Eg: File type is illegal.
+Status Code: 400 BAD REQUEST
+Response Example:
+
+{
+
+}
+
+"code": 400,
+"message": "Invalid media type",
+"success": false
+
+B Request the File Numbers under the File Directory
+
+The below interface is for authorized users to request the file numbers under the target
+directory.
+URL: /api/v1/getmediacount
+Method: GET
+
+Request Data
+Data Name
+
+Type
+
+media_type
+
+int
+
+Description
+0: Images
+68 / 110
+
+1: Videos
+
+path
+
+String
+
+If the string is empty, return to
+request the total file number in
+present.
+If the string is not empty,
+return to the number of the
+target directory.
+
+Response Data
+The format of the response data is below:
+
+{
+
+}
+
+"code": 200, // Status code.
+"data": {}, // Content of the data.
+"success": true, // If the request is successful.
+"message": "" // Error message if the request is failed.
+
+The definition of data is below:
+Data Name
+
+Type
+
+Desciption
+
+media_type
+
+int
+
+count
+
+int
+
+File number
+
+path
+
+int
+
+Path of file directory
+
+0: Images
+1: Videos
+
+Request Example
+Request the number of all the images:
+
+{
+}
+
+"media_type": 0,
+"path": ""
+
+Request the image numbers under the target path:
+
+69 / 110
+
+{
+}
+
+"media_type": 0,
+"path": "/photo/aa"
+
+Successful Response
+Condition: Request data is legal and user identity verification passed.
+Status Code: 200 OK
+Response Example:
+File numbers which return to 'photo/aa' after response:
+
+{
+
+}
+
+"code": 200,
+"data": {
+"media_type": 0,
+"count": 20,
+"path": "/photo/aa"
+},
+"success": true
+
+Error Response
+Condition: Request data is illegal. Eg: File type is illegal. File path does not exist.
+Status Code: 400 BAD REQUEST
+Response Example:
+
+{
+
+}
+
+"code": 400,
+"message": "Invalid media type",
+"success": false
+
+C Request File List
+
+The below interface is for authorized users to request the file list.
+URL: /api/v1/getmedialist
+Method: GET
+70 / 110
+
+Request Data
+Data Name
+
+Type
+
+media_type
+
+int
+
+Description
+0: Images
+1: Videos
+Empty String: File list is for all
+the files of the present type.
+
+path
+
+String
+
+Non-empty String: File list is
+for the files under the target
+path.
+
+start
+
+int
+
+Start index of the file list
+Number of the file list.
+
+count
+
+int
+
+If “start” plus “count” is more
+than the number of the file list,
+return to the end of the file list
+from “start”.
+
+Response Data
+The format of the response data is below:
+
+{
+
+}
+
+"code": 200, // Status code.
+"data": {}, // Content of data.
+"success": true, // If the request is successful.
+"message": "" // Error message if the request is failed.
+
+The definition of data is below:
+Data Name
+
+Type
+
+media_type
+
+int
+
+path
+
+String
+
+list
+
+[
+
+Description
+0: Images
+1: Videos
+The requested path.
+File list.
+71 / 110
+
+{
+"name": "aa.jpg",
+"url": "http://xxx/yyy/aa.jpg"
+},
+{
+"name": "bb.jpg",
+"url": "http://xxx/yyy/bb.jpg"
+},
+]
+
+Request Example
+Request the image list from “photo/20230630” directory:
+
+{
+
+}
+
+"media_type": 0,
+"path": "photo/20230630",
+"start": 0,
+"count": 10
+
+Successful Response
+Condition: Request data is legal and user identity verification passed.
+Status Code: 200 OK
+Response Example:
+Return to the image list under “'photo/20230630” directory after response:
+
+{
+
+"code": 200,
+"data":{
+"media_type": 0,
+"path": "photo/20230630",
+"list": [
+{
+"name": "aa.jpg",
+"url": "http://xxx/yy/aa.jpg"
+},
+72 / 110
+
+{
+"name": "bb.jpg",
+"url": "http://xxx/yy/bb.jpg"
+},
+...
+],
+
+}
+
+},
+"success": true
+
+Error Response
+Condition: Request data is illegal. Eg: File type is illegal. File path does not exist. Start index
+exceed the max value. Etc.
+Status Code: 400 BAD REQUEST
+Response Example:
+
+{
+
+}
+
+"code": 400,
+"message": "path not exist",
+"success": false
+
+73 / 110
+
+Appendix 1: Supported Versions of Control Commands
+Product Type
+
+ZT30
+
+Firmware Type
+
+Firmware Version
+
+Camera
+
+(NAND Flash) Quad-Sensor Gimbal Firmware
+svn1527 svn1774 v0.2.7 2025-01-14
+
+Gimbal
+
+ZT30 Gimbal Main Control Firmware v0.2.8
+svn8441 2024-01-14
+
+Zoom Version
+
+ZT30 Zoom Module Firmware v0.1.6 svn6792
+2023-07-10
+
+Camera
+
+ZT6 Camera Flash Firmware svn1528 svn1652
+v0.1.9 2024-10-14
+
+Gimbal
+
+ZT6 Gimbal Firmware v0.2.3 svn8050
+2024-09-12
+
+Camera
+
+ZR10 Encoder Board Flash Firmware v0.3.5
+svn1315 svn1467 2024-04-16
+
+Gimbal
+
+ZR10 Gimbal Firmware v0.4.0 svn7635
+2024-04-16
+
+ZT6
+
+ZR10
+
+ZR30
+
+Zoom Board
+
+ZR10 Zoom Module Firmware v0.2.3 svn7084
+2023-10-13
+
+Camera
+
+ZR30Camera Flash Firmware (nand flash) v0.1.6
+svn1370 2024-01-24
+
+Gimbal
+
+ZR30Gimbal Main Control Firmware
+svn7410 2024-01-23
+
+v0.2.2
+
+Zoom Board
+
+ZR30Zoom Module Firmware v0.1.6 svn6792
+2023-08-16
+
+Camera
+
+A2 mini FPV Firmware v0.1.6 svn 1008 svn1101
+2023-09-26
+
+Gimbal
+
+A2miniGimbal Main Board Firmware v0.2.9
+svn8505 2025-02-11
+
+Camera
+
+A8 miniGimbal Camera Flash Firmware v0.2.8
+svn1729 2024-12-18
+
+Gimbal
+
+A8 min iGimbal Main Board Firmware v0.3.9
+svn8405 2025-1-7
+
+A2 mini
+
+A8 mini
+
+74 / 110
+
+Appendix 2: Control Command Support List
+Note: Commands not listed in the table are supported by the entire series of models.
+TTL Interface：
+Command
+
+ZT3
+0
+
+ZT
+6
+
+ZR1
+0
+
+ZR3
+0
+
+A8mi
+ni
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+record_sta
+
+
+
+
+
+
+
+
+
+gimbal_motion_
+mode
+
+
+
+
+
+
+
+
+
+gimbal_mounting
+_dir
+
+
+
+
+
+
+
+
+
+video_hdmi_or_c
+vbs
+
+
+
+
+
+
+
+Data Name
+
+camera_firmwar
+e_ver
+0x01：Request
+
+Firmware
+Version
+
+gimbal_firmwar
+e_ver
+zoom_firmware
+_ver
+
+Data
+Description
+
+Camera
+firmware
+version
+Gimbal
+firmware
+version
+Zoom
+firmware
+version
+
+0x04：Auto
+
+Focus
+
+0x06：Manual
+Focus
+
+ZR3
+0
+does
+not
+reply
+
+0x07：Gimbal
+Rotation
+
+
+
+reserved
+hdr_sta
+reserved
+0x0A：Request
+
+Camera System
+Info
+
+zoom_linkage
+0：Photo
+
+0x0B：Return
+
+Function
+Feedback
+
+info_type
+
+successful
+1：Photo
+failed
+2：HDR
+mode
+enabled
+3：HDR
+mode
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+75 / 110
+
+0x0C：Photo,
+
+video, etc.
+
+func_type
+
+disabled
+4：Video
+recording
+failed
+5.：Start
+video
+recording
+6： End
+video
+recording
+0：Take
+photo
+1：Switch
+HDR
+2：Video
+recording
+3：Lock
+mode
+4：Follow
+mode
+5：FPV
+mode
+6：Set
+HDMI
+video
+output
+7：Set
+CVBS
+video
+output
+8：Turn off
+all
+HDMI/C
+VBS
+video
+outputs
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+9：
+
+One-click
+downward
+10：Zoom
+linkage
+CMD_ID:
+0x10 —
+Request Video
+Stitching Mode
+
+
+
+0：
+
+Stitching
+mode Main
+stream:
+
+
+
+
+
+76 / 110
+
+Zoom &
+Thermal
+imaging,
+Sub
+stream:
+Wide-angl
+e
+1：
+
+Stitching
+mode Main
+stream:
+Wide-angl
+e&
+Thermal
+imaging,
+Sub
+stream:
+Zoom
+
+
+
+2：
+
+Stitching
+mode Main
+stream:
+Zoom &
+Wide-angl
+e, Sub
+stream:
+Thermal
+imaging
+
+
+
+3：
+
+Non-stitch
+ing mode Main
+stream:
+Zoom,
+Sub
+stream:
+Thermal
+imaging
+
+
+
+
+
+4：
+
+Non-stitch
+ing mode Main
+stream:
+Zoom,
+Sub
+stream:
+
+
+
+77 / 110
+
+Wide-angl
+e
+5：
+
+Non-stitch
+ing mode Main
+stream:
+Wide-angl
+e, Sub
+stream:
+Thermal
+imaging
+
+
+
+6：
+
+Non-stitch
+ing mode Main
+stream:
+Wide-angl
+e, Sub
+stream:
+Zoom
+
+
+
+7：
+
+Non-stitch
+ing mode Main
+stream:
+Thermal
+imaging,
+Sub
+stream:
+Zoom
+
+
+
+
+
+8：
+
+Non-stitch
+ing mode Main
+stream:
+Thermal
+imaging,
+Sub
+stream:
+Wide-angl
+e
+
+
+
+0：
+0x11：Set Video
+
+Stitching Mode
+
+Stitching
+Mode
+(Main
+Stream:
+
+
+
+
+
+78 / 110
+
+Zoom &
+Thermal,
+Sub
+Stream:
+Wide-Ang
+le)
+1：
+
+Stitching
+Mode
+(Main
+Stream:
+Wide-Ang
+le &
+Thermal,
+Sub
+Stream:
+Zoom)
+
+
+
+2：
+
+Stitching
+Mode
+(Main
+Stream:
+Zoom &
+Wide-Ang
+le, Sub
+Stream:
+Thermal)
+
+
+
+3：
+
+Non-Stitc
+hing
+Mode
+(Main
+Stream:
+Zoom,
+Sub
+Stream:
+Thermal)
+
+
+
+
+
+4：
+
+Non-Stitc
+hing
+Mode
+(Main
+Stream:
+Zoom,
+Sub
+Stream:
+Wide-Ang
+
+
+
+79 / 110
+
+le)
+5：
+
+Non-Stitc
+hing
+Mode
+(Main
+Stream:
+Wide-Ang
+le, Sub
+Stream:
+Thermal)
+
+
+
+6：
+
+Non-Stitc
+hing
+Mode
+(Main
+Stream:
+Wide-Ang
+le, Sub
+Stream:
+Zoom)
+
+
+
+7：
+
+Non-Stitc
+hing
+Mode
+(Main
+Stream:
+Thermal,
+Sub
+Stream:
+Zoom)
+
+
+
+
+
+0x12: Get
+selected point
+temperature
+
+
+
+
+
+0x13: Local
+temperature
+measurement
+
+
+
+
+
+0x14: Global
+temperature
+measurement
+
+
+
+
+
+0x15: Request
+laser ranging
+distance
+
+
+
+0x17: Request
+
+
+80 / 110
+
+latitude and
+longitude of
+laser ranging
+target
+0x1A: Request
+current thermal
+imaging
+pseudo-color
+
+
+
+
+
+0x1B: Set
+thermal
+imaging
+pseudo-color
+
+
+
+
+
+0x23: Send RC
+channel data to
+gimbal
+0x24: Request
+flight controller
+to send data
+stream to
+gimbal
+0x25: Request
+gimbal to send
+data stream
+
+
+
+0x27: Request
+gimbal control
+
+
+
+mode data
+
+0x27: Request
+gimbal control
+mode data
+
+
+
+0x28: Request
+gimbal weak
+control
+threshold data
+
+
+
+0x29: Set
+gimbal weak
+control
+threshold data
+
+
+
+0x2A: Request
+gimbal motor
+
+
+81 / 110
+
+voltage data
+0x31: Request
+gimbal system
+information
+
+
+
+0x32: Set laser
+ranging status
+
+
+
+0x33: Request
+thermal
+imaging output
+mode
+
+
+
+
+
+0x34: Set
+thermal
+imaging output
+mode
+
+
+
+
+
+0x35: Get a
+single
+temperature
+frame
+
+
+
+
+
+0x37: Request
+thermal
+imaging gain
+mode
+
+
+
+
+
+0x38: Set
+thermal
+imaging gain
+mode
+
+
+
+
+
+0x39: Request
+thermal
+imaging
+environmental
+correction
+parameters
+
+
+
+
+
+0x3A: Set
+thermal
+imaging
+environmental
+correction
+parameters
+
+
+
+
+
+00x3B: Request
+
+
+
+
+82 / 110
+
+thermal
+imaging
+environmental
+correction
+switch
+0x3C: Set
+thermal
+imaging
+environmental
+correction
+switch
+
+0x3E: Send
+GPS raw data
+to gimbal
+
+ZR1
+0 and
+ZR3
+0
+have
+no
+respo
+nse.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+0x40: Request
+system time
+0x41:
+Single-axis
+attitude control
+
+A8
+mini
+respo
+nds
+with
+0x0E
+.
+
+
+
+0x42: Request
+thermal
+imaging
+threshold image
+switch state
+0x43：Set thermal
+imaging threshold
+image switch state
+0x44：Request
+thermal imaging
+threshold image
+parameters
+0x45：Set thermal
+83 / 110
+
+imaging threshold
+image parameters
+0x46：Request
+Thermal imaging
+threshold precision
+0x47：Set Thermal
+imaging threshold
+precision
+
+0x48：Format
+
+SD Card
+
+ZT30
+,
+ZR3
+0,
+and
+A8
+mini
+have
+no
+respo
+nse.
+
+
+
+
+
+
+
+
+
+0x49：
+get_picture_name_
+
+
+
+type
+0x4A：
+set_picture_name_
+
+
+
+type
+0x4B: Request
+
+
+HDMI OSD
+Display Status
+0x4C: Set HDMI
+
+
+
+OSD Display
+Status
+0x4D: Get AI
+Mode Status
+
+0x4E: Request
+AI module
+tracking target
+coordinate
+information
+stream status
+
+
+
+
+
+
+
+
+
+
+
+
+
+84 / 110
+
+0x4F: Manually
+update thermal
+imaging shutter
+
+
+
+
+
+0x50: AI
+module
+tracking target
+coordinate
+information
+stream
+
+
+
+
+
+0x51: Set AI
+module
+tracking target
+coordinate
+information
+stream status
+
+
+
+
+
+0x70: Request
+weak control
+mode
+
+
+
+0x71: Set weak
+control mode
+
+
+
+0x80: Gimbal
+camera soft
+reboot
+
+
+
+
+
+
+
+0x81: Get
+gimbal camera
+IP address
+0x82: Set
+gimbal camera
+IP address
+
+85 / 110
+
+UDP Interface:
+Command
+
+Data Name
+
+Data
+Descript
+ion
+
+Rem
+arks
+
+Camera
+firmwar
+e
+version
+Gimbal
+gimbal_firmwar firmwar
+e_ver
+e
+version
+
+camera_firmwar
+e_ver
+
+0x01: Get
+Firmware
+Version
+
+zoom_firmware
+_ver
+
+Zoom
+firmware
+version
+
+ZT
+30
+
+Z
+T6
+
+ZR
+10
+
+
+
+
+
+
+
+
+
+
+
+0x02: Get
+Hardware ID
+
+
+
+0x04: Auto Focus
+
+
+
+0x05: Manual
+Zoom
+0x06: Manual
+Focus
+
+
+
+0x07: Gimbal
+Rotation
+
+A2mi
+ni
+
+A8mi
+ni
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+No
+respo
+nse
+from
+A2
+mini
+
+ZR
+30
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+record_sta
+
+
+
+
+
+
+
+
+
+gimbal_motion_
+mode
+
+
+
+
+
+
+
+
+
+
+
+
+
+gimbal_mountin
+g_dir
+
+
+
+
+
+
+
+
+
+
+
+
+
+video_hdmi_or_
+cvbs
+
+
+
+
+
+zoom_linkage
+
+
+
+
+
+reserved
+hdr_sta
+reserved
+
+0x0A: Request
+Camera
+System
+Information
+
+0x0B: Return
+Function
+
+info_type
+
+
+
+
+
+
+
+0:
+Photo
+86 / 110
+
+Feedback
+Information
+
+capture
+success
+ful
+1:
+Photo
+capture
+failed
+2: HDR
+mode
+enabled
+3: HDR
+mode
+disable
+d
+4:
+Video
+recordi
+ng
+failed
+
+6: Video
+recording
+stopped
+
+0x0C: Capture
+Photo / Record
+Video
+
+func_type
+
+6:
+Video
+recordi
+ng
+stopped
+0: Take
+a photo
+1: HDR
+mode
+switch
+2:
+Start/st
+op
+video
+recordi
+ng
+3: Lock
+mode
+4:
+Follow
+mode
+5: FPV
+mode
+6: Set
+HDMI
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+87 / 110
+
+video
+output
+7: Set
+CVBS
+video
+output
+8:
+Disable
+all
+HDMI/
+CVBS
+video
+output
+9:
+One-ke
+y
+downw
+ard
+view
+10:
+Linked
+zoom
+
+
+
+
+
+0x0D: Get
+Gimbal
+Attitude
+No
+resp
+onse
+fro
+m
+ZR3
+0
+No
+resp
+onse
+fro
+m
+ZR3
+0
+
+0x0E: Set
+Gimbal
+Attitude Data
+
+0x0F:
+Absolute
+Zoom
+
+0x10: Request
+Video
+Stitching
+Mode
+
+0:
+Stitchin
+g mode
+(Main
+stream:
+Zoom
+&
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+88 / 110
+
+Therma
+l
+imagin
+g, Sub
+stream:
+Wide
+angle)
+1:
+Stitchin
+g mode
+(Main
+stream:
+Wide
+angle &
+Therma
+l
+imagin
+g, Sub
+stream:
+Zoom)
+2:
+Stitchin
+g mode
+(Main
+stream:
+Zoom
+& Wide
+angle,
+Sub
+stream:
+Therma
+l
+imagin
+g)
+3:
+Non-sti
+tching
+mode
+(Main
+stream:
+Zoom,
+Sub
+stream:
+Therma
+l
+imagin
+g)
+
+
+
+
+
+
+
+
+
+89 / 110
+
+4:
+Non-sti
+tching
+mode
+(Main
+stream:
+Zoom,
+Sub
+stream:
+Wide
+angle)
+5:
+Non-sti
+tching
+mode
+(Main
+stream:
+Wide
+angle,
+Sub
+stream:
+Therma
+l
+imagin
+g)
+·
+6:
+Non-sti
+tching
+mode
+(Main
+stream:
+Wide
+angle,
+Sub
+stream:
+Zoom)
+7:
+Non-sti
+tching
+mode
+(Main
+stream:
+Therma
+l
+imagin
+g, Sub
+
+
+
+
+
+
+
+
+
+
+
+90 / 110
+
+0x11: Set
+Video
+Stitching
+Mode
+
+stream:
+Zoom)
+8:
+Non-sti
+tching
+mode
+(Main
+stream:
+Therma
+l
+imagin
+g, Sub
+stream:
+Wide
+angle)
+0:
+Stitchin
+g Mode
+(Main
+Stream:
+Zoom
+&
+Therma
+l
+Imagin
+g, Sub
+Stream:
+Wide
+Angle)
+1:
+Stitchin
+g Mode
+(Main
+Stream:
+Wide
+Angle
+&
+Therma
+l
+Imagin
+g, Sub
+Stream:
+Zoom)
+2:
+Stitchin
+g Mode
+(Main
+
+
+
+
+
+
+
+
+
+
+
+91 / 110
+
+Stream:
+Zoom
+& Wide
+Angle,
+Sub
+Stream:
+Therma
+l
+Imagin
+g)
+3:
+Non-Sti
+tching
+Mode
+(Main
+Stream:
+Zoom,
+Sub
+Stream:
+Therma
+l
+Imagin
+g)
+·
+4:
+Non-Sti
+tching
+Mode
+(Main
+Stream:
+Zoom,
+Sub
+Stream:
+Wide
+Angle)
+55:
+Non-Sti
+tching
+Mode
+(Main
+Stream:
+Wide
+Angle,
+Sub
+Stream:
+Therma
+l
+
+
+
+
+
+
+
+
+
+92 / 110
+
+Imagin
+g)
+6:
+Non-Sti
+tching
+Mode
+(Main
+Stream:
+Wide
+Angle,
+Sub
+Stream:
+Zoom)
+7:
+Non-Sti
+tching
+Mode
+(Main
+Stream:
+Therma
+l
+Imagin
+g, Sub
+Stream:
+Zoom)
+
+
+
+
+
+
+
+0x12: Get
+Temperature at
+Selected Point
+
+
+
+
+
+0x13: Local
+Temperature
+Measurement
+
+
+
+
+
+0x14: Global
+Temperature
+Measurement
+
+
+
+
+
+0x15: Request
+Laser Distance
+Measurement
+
+
+
+0x16: Request
+Supported
+Zoom Range
+
+
+
+0x17: Request
+Latitude and
+Longitude
+
+
+
+
+
+
+
+93 / 110
+
+Information of
+Laser
+Rangefinder
+Target
+0x18: Request
+Current Zoom
+Magnification
+
+
+
+
+
+
+
+0x19: Request
+Current
+Gimbal Mode
+
+
+
+
+
+
+
+0x1A: Request
+Current
+Thermal
+Imaging
+Pseudo-Color
+
+
+
+
+
+0x1B: Set
+Thermal
+Imaging
+Pseudo-Color
+
+
+
+
+
+0x22: Send
+Aircraft
+Attitude Data
+to Gimbal
+
+
+
+
+
+
+
+
+
+
+
+0x23: Send RC
+Channel Data
+to Gimbal
+0x24: Request
+Flight Control
+Data Stream to
+Gimbal
+0x25: Request
+Gimbal Data
+Stream
+
+
+
+0x26: Request
+Gimbal
+Magnetic
+Encoder Angle
+Data
+
+
+
+0x27: Request
+
+
+94 / 110
+
+Gimbal
+Control Mode
+Data
+0x28: Request
+Gimbal Weak
+Control
+Threshold
+Data
+
+
+
+0x29: Set
+Gimbal Weak
+Control
+Threshold
+Data
+
+
+
+0x2A:
+Request
+Gimbal Motor
+Voltage Data
+
+
+
+0x30: Set UTC
+Time
+
+
+
+0x31: Request
+Gimbal
+System
+Information
+
+
+
+0x32: Set
+Laser
+Rangefinder
+Status
+
+
+
+0x33: Request
+Thermal
+Imaging
+Output Mode
+
+
+
+
+
+0x34: Set
+Thermal
+Imaging
+Output Mode
+
+
+
+
+
+0x35: Get One
+Temperature
+Frame
+
+
+
+
+
+0x37: Request
+
+
+
+
+
+
+
+
+
+
+
+
+
+95 / 110
+
+Thermal
+Imaging Gain
+Mode
+0x38: Set
+Thermal
+Imaging Gain
+Mode
+
+
+
+
+
+0x39: Request
+Thermal
+Imaging
+Environmental
+Correction
+Parameters
+
+
+
+
+
+0x3A: Set
+Thermal
+Imaging
+Environmental
+Correction
+Parameters
+
+
+
+
+
+0x3B: Request
+Thermal
+Imaging
+Environmental
+Correction
+Switch
+
+
+
+
+
+0x3C: Set
+Thermal
+Imaging
+Environmental
+Correction
+Switch
+
+
+
+
+
+
+
+
+
+0x3E: Send
+GPS Raw Data
+to Gimbal
+
+ZR1
+0,
+ZR3
+0,
+and
+A8
+mini
+no
+resp
+
+
+
+
+
+
+
+96 / 110
+
+onse
+.
+4o
+0x40: Request
+System Time
+
+0x41: Single
+Axis Attitude
+Control
+
+A8
+mini
+resp
+ond
+ed
+with
+0x0
+E.
+
+
+
+0x42: Request
+Thermal
+Imaging
+Threshold
+Range Switch
+0x43：Set thermal
+imaging threshold
+image switch state
+0x44：Request
+thermal imaging
+threshold image
+parameters
+0x45：Set thermal
+imaging threshold
+image parameters
+0x46：Request
+Thermal imaging
+threshold
+precision
+0x47：Set
+Thermal imaging
+threshold
+precision
+
+0x48: Format
+SD Card
+
+ZT3
+0,
+
+
+
+
+
+
+
+
+
+
+97 / 110
+
+ZR3
+0,
+and
+A8
+mini
+no
+resp
+onse
+.
+0x49：
+get_picture_name
+
+
+
+_type
+0x4A：
+set_picture_name
+
+
+
+_type
+
+0x4B: Request
+HDMI OSD
+Display Status
+
+
+
+0x4C: Set
+HDMI OSD
+Display Status
+
+
+
+0x4D: Get AI
+Mode Status
+
+
+
+
+
+
+
+0x4E: Get AI
+Module Target
+Tracking
+Coordinate
+Information
+Stream Status
+
+
+
+
+
+
+
+0x4F:
+Manually
+Update
+Thermal
+Imaging
+Shutter
+
+
+
+
+
+0x50: AI
+Module Target
+Tracking
+Coordinate
+
+
+
+
+
+98 / 110
+
+Information
+Stream
+0x51: Set AI
+Module Target
+Tracking
+Coordinate
+Information
+Stream Status
+
+
+
+0x70: Request
+Weak Control
+Mode
+
+
+
+0x71: Set
+Weak Control
+Mode
+
+
+
+0x80: Gimbal
+Camera Soft
+Reboot
+
+
+
+
+
+
+
+
+
+0x81: Get
+Gimbal
+Camera IP
+Address
+0x82: Set
+Gimbal
+Camera IP
+Address
+
+99 / 110
+
+TCP interface：
+Command
+
+Data Name
+
+Description
+
+0x00：TCP
+
+Heartbeat
+
+0x01：Get
+Version Number
+
+Remarks
+
+ZT
+30
+
+ZT
+6
+
+ZR
+10
+
+ZR
+30
+
+
+
+
+
+
+
+
+
+camera_firmwar
+e_ver
+
+Camera
+firmware
+version
+
+
+
+
+
+
+
+gimbal_firmwar
+e_ver
+
+Gimbal
+firmware
+version
+
+
+
+
+
+
+
+zoom_firmware
+_ver
+
+Zoom
+firmware
+version
+
+
+
+0x02：获取硬件
+IDGet Hardware
+ID
+
+
+
+0x04：Auto
+Focus
+
+
+
+0x05：Manual
+Zoom
+
+
+
+0x06：Manual
+Focus
+
+
+
+0x07：Gimbal
+Rotation
+
+
+
+0x08：One-Key
+Reset to Center
+
+A8mi
+ni
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+record_sta
+
+
+
+
+
+
+
+
+
+gimbal_motion_
+mode
+
+
+
+
+
+
+
+
+
+gimbal_mountin
+g_dir
+
+
+
+
+
+
+
+
+
+video_hdmi_or_
+cvbs
+
+
+
+
+
+zoom_linkage
+
+
+
+
+
+
+
+reserved
+hdr_sta
+reserved
+0x0A：Request
+Camera System
+Information
+
+
+
+0: Photo
+captured
+successfully
+0x0B：Return
+Function
+Feedback
+Information
+
+info_type
+
+1: Photo
+capture
+failed
+2: HDR
+mode
+enabled
+100 / 110
+
+3: HDR
+mode
+disabled
+4: Video
+recording
+failed
+5: Video
+recording
+started
+6: Video
+recording
+stopped
+0: Photo
+Capture
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+2: Video
+Recording
+
+0x0C: Photo
+Capture,
+Video
+Recording,
+etc.
+
+func_type
+
+2: Video
+Recording
+3: Lock
+Mode
+4: Follow
+Mode
+5: FPV
+Mode
+6: Set
+HDMI
+Video
+Output
+7: Set
+CVBS
+Video
+Output
+8: Disable
+All
+HDMI/CV
+BS Video
+Outputs
+9:
+One-Key
+Downward
+View
+10: Linked
+Zoom
+
+
+
+
+
+
+
+
+
+
+
+
+
+101 / 110
+
+0x0D: Get
+Gimbal
+Attitude
+ZR30
+No
+Respons
+e
+ZR30
+No
+Respons
+e
+
+0x0E: Set
+Gimbal
+Attitude Data
+0x0F:
+Absolute
+Zoom
+
+0x10: Request
+Video
+Stitching
+Mode
+
+0: Stitched
+Mode
+(Main
+stream:
+Zoom &
+Thermal
+Imaging,
+Sub
+stream:
+Wide
+Angle)
+1: Stitched
+Mode
+(Main
+stream:
+Wide
+Angle &
+Thermal
+Imaging,
+Sub
+stream:
+Zoom)
+2: Stitched
+Mode
+(Main
+stream:
+Zoom &
+Wide
+Angle, Sub
+stream:
+Thermal
+Imaging)
+3:
+Non-Stitch
+ed Mode
+(Main
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+102 / 110
+
+stream:
+Zoom, Sub
+stream:
+Thermal
+Imaging)
+4:
+Non-Stitch
+ed Mode
+(Main
+stream:
+Zoom, Sub
+stream:
+Wide
+Angle)
+55:
+Non-Stitch
+ed Mode
+(Main
+stream:
+Wide
+Angle, Sub
+stream:
+Thermal
+Imaging)
+6:
+Non-Stitch
+ed Mode
+(Main
+stream:
+Wide
+Angle, Sub
+stream:
+Zoom)
+7:
+Non-Stitch
+ed Mode
+(Main
+stream:
+Thermal
+Imaging,
+Sub
+stream:
+Zoom)
+8:
+Non-Stitch
+ed Mode
+(Main
+
+
+
+
+
+
+
+
+
+
+
+
+
+103 / 110
+
+stream:
+Thermal
+Imaging,
+Sub
+stream:
+Wide
+Angle)
+
+0x11: Set
+Video
+Stitching
+Mode
+
+0: Stitched
+Mode (Main
+stream:
+Zoom &
+Thermal
+Imaging, Sub
+stream: Wide
+Angle)
+
+
+
+1: Stitched
+Mode (Main
+stream: Wide
+Angle &
+Thermal
+Imaging, Sub
+stream:
+Zoom)
+
+
+
+2: Stitched
+Mode (Main
+stream:
+Zoom &
+Wide Angle,
+Sub stream:
+Thermal
+Imaging)
+
+
+
+3:
+Non-Stitched
+Mode (Main
+stream:
+Zoom, Sub
+stream:
+Thermal
+Imaging)
+
+
+
+4:
+Non-Stitched
+Mode (Main
+stream:
+Zoom, Sub
+stream: Wide
+Angle)
+
+
+
+5:
+Non-Stitched
+Mode (Main
+stream: Wide
+Angle, Sub
+stream:
+Thermal
+Imaging)
+
+
+
+
+
+
+
+104 / 110
+
+6:
+Non-Stitched
+Mode (Main
+stream: Wide
+Angle, Sub
+stream:
+Zoom)
+
+
+
+7:
+Non-Stitched
+Mode (Main
+stream:
+Thermal
+Imaging, Sub
+stream:
+Zoom)
+
+
+
+
+
+0x12: Get the
+temperature at
+the selected
+point
+
+
+
+
+
+0x13: Local
+temperature
+measurement
+
+
+
+
+
+0x14: Global
+temperature
+measurement
+
+
+
+
+
+0x15:
+Request laser
+ranging
+distance
+
+
+
+0x16: Request
+the current
+supported
+zoom range
+
+
+
+0x17: Request
+the latitude
+and longitude
+of the laser
+ranging target
+
+
+
+0x18: Request
+the current
+zoom level
+
+
+
+
+
+
+
+0x19: Request
+the current
+
+
+
+
+
+
+
+
+
+
+
+
+
+105 / 110
+
+gimbal mode
+0x1A:
+Request the
+current
+thermal
+imaging
+pseudocolor
+
+
+
+
+
+0x1B: Set
+thermal
+imaging
+pseudocolor
+
+
+
+
+
+0x20: Request
+camera
+encoding
+parameters
+
+
+
+
+
+
+
+
+
+0x21: Set
+camera
+encoding
+parameters
+
+
+
+
+
+
+
+
+
+0x22: Send
+the aircraft
+attitude data
+to the gimbal
+
+
+
+
+
+
+
+
+
+0x23: Send
+RC channel
+data to the
+gimbal
+0x24: Request
+flight control
+to send data
+stream to the
+gimbal
+0x26: Request
+gimbal magnetic
+encoding angle
+
+
+
+data
+
+0x26: Request
+gimbal
+magnetic
+
+
+
+106 / 110
+
+encoding
+angle data
+0x27: Request
+gimbal control
+mode data
+
+
+
+0x28:
+Request
+gimbal weak
+control
+threshold data
+
+
+
+0x29: Set
+gimbal weak
+control
+threshold data
+
+
+
+0x2A:
+Request
+gimbal motor
+voltage data
+
+
+
+0x30: Set
+UTC time
+
+
+
+0x31: Request
+gimbal system
+information
+
+
+
+0x32: Set
+laser ranging
+status
+
+
+
+0x33: Request
+thermal
+imaging
+output mode
+
+
+
+
+
+0x34: Set
+thermal
+imaging
+output mode
+
+
+
+
+
+0x35: Get a
+single
+temperature
+frame
+
+
+
+
+
+
+
+
+
+
+
+107 / 110
+
+0x37: Request
+thermal
+imaging gain
+mode
+
+
+
+
+
+0x38: Set
+thermal
+imaging gain
+mode
+
+
+
+
+
+0x39: Request
+thermal
+imaging
+environmental
+correction
+parameters
+
+
+
+
+
+0x3A: Set
+thermal
+imaging
+environmental
+correction
+parameters
+
+
+
+
+
+0x3B: Request
+thermal
+imaging
+environmental
+correction
+switch
+
+
+
+
+
+0x3C: Set
+thermal
+imaging
+environmental
+correction
+switch
+
+
+
+
+
+
+
+
+
+0x3E: Send
+GPS raw data
+to the gimbal
+
+ZR10,
+ZR30
+no
+respons
+e.
+
+
+
+
+
+0x40:
+Request
+system time
+108 / 110
+
+0x41:
+Single-axis
+attitude
+control
+0x42: Request
+thermal
+imaging
+threshold
+range switch
+0x43：Set thermal
+imaging
+threshold image
+switch state
+0x44：Request
+thermal imaging
+threshold image
+parameters
+0x45：Set thermal
+imaging
+threshold image
+parameters
+0x46：Request
+Thermal imaging
+threshold
+precision
+0x47：Set
+Thermal imaging
+threshold
+precision
+
+0x48: Format
+SD card
+
+ZT30,
+ZR30 no
+response
+
+
+
+
+
+
+
+
+
+0x49：
+get_picture_nam
+
+
+
+e_type
+0x4A：
+set_picture_name
+
+
+
+_type
+
+109 / 110
+
+0x4B: Request
+HDMI OSD
+(On-Screen
+Display)
+status
+0x4C: Set
+HDMI OSD
+display status
+0x4D: Get AI
+mode status
+
+
+
+
+
+0x4E: Get the
+AI module's
+tracking target
+coordinate
+stream status
+
+
+
+
+
+0x4F:
+Manually
+update
+thermal
+imaging
+shutter
+
+
+
+
+
+0x50: AI
+module's
+tracking target
+coordinate
+information
+stream
+
+
+
+
+
+0x51: Set AI
+module's
+tracking target
+coordinate
+information
+stream status
+
+
+
+
+
+0x70: Request
+weak control
+mode
+
+
+
+0x71: Set
+weak control
+
+
+
+110 / 110
+
+mode
+0x80: Gimbal
+camera soft
+reboot
+
+
+
+0x81: Get
+gimbal camera
+IP address
+0x82: Set
+gimbal camera
+IP address
+
+111 / 110
+
+
