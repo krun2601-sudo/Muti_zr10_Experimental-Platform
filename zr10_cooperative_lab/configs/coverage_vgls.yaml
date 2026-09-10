@@ -1,0 +1,8 @@
+extends: coverage_common.yaml
+policy:
+  name: custom
+  custom: zr10lab.algorithms.viewpoint_local_search:ViewpointLocalSearchPolicy
+  algorithm_id: vgls
+  planning_time_budget_s: 2.0
+  policy_seed: 7
+  tvp_balance_weight: 0.35
