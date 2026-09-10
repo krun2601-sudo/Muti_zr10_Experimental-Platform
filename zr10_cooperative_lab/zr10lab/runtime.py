@@ -96,7 +96,6 @@ class Experiment:
                     first_covered_t_s=record.first_covered_t_s,device_ids_json=dumps(record.device_ids),
                     viewpoint_ids_json=dumps(record.viewpoint_ids),required_views=record.required_views)
 
-        # 真值派生指标禁止泄漏到决策上下文。严格 coverage_* 完全由遥测/已知几何产生，可公开。
         public_metrics = {k:v for k,v in measured_metrics.items()
                           if (k.startswith("roi_") or k.startswith("coverage_")) and v is not None}
         context = PolicyContext(t=t,dt=dt,step=self.step,devices=states,
@@ -176,7 +175,9 @@ def run_simulation(cfg,output=None,realtime=False,progress=None):
         experiment = Experiment(cfg,recorder)
         for _ in range(steps):
             begin = time.perf_counter()
-            actions = experiment.process(world.t,dt,world.states(),world.observe(),truth=world.truth())
+            detections = () if experiment.coverage_enabled else world.observe()
+            actions = experiment.process(world.t,dt,world.states(),detections,
+                                         truth=(None if experiment.coverage_enabled else world.truth()))
             if progress:
                 progress(experiment.latest)
             if experiment.latest.get("done"):
@@ -205,9 +206,14 @@ async def run_hardware(cfg,output=None,armed=False,progress=None):
     if missing:
         raise ValueError(f"以下站点尚未完成实测标定: {missing}；填写标定值后设置 calibration_verified: true")
     from .hardware import HardwareFleet
-    from .vision import VisionPipeline
+    vision = None
+    if not coverage_mode:
+        from .vision import VisionPipeline
+        vision = VisionPipeline(cfg,event_sink=None)
     start = time.monotonic()
     recorder = CSVRecorder(output or cfg.logging.get("root","runs"),cfg.to_dict(),"hardware",start)
+    if vision is not None:
+        vision.event_sink = recorder.event
     def result_sink(result):
         recorder.write("commands",result.t,device_id=result.device_id,command_t=result.t,status=result.status,
             sent=result.sent,ack=result.ack,latency_ms=result.latency_ms,applied_json=dumps(result.applied),
@@ -218,14 +224,15 @@ async def run_hardware(cfg,output=None,armed=False,progress=None):
             pitch_rate_dps=s.pitch_rate_dps,connected=s.connected,sequence=s.sequence,source=s.source,
             age_s=0,raw_json=dumps(s.raw))
     fleet = HardwareFleet(cfg,event_sink=recorder.event,result_sink=result_sink,telemetry_sink=telemetry_sink)
-    vision = VisionPipeline(cfg,event_sink=recorder.event)
     completed = False
     reason = "duration_elapsed"
     dt = 1/float(cfg.system.get("rate_hz",10))
     experiment = None
     try:
         experiment = Experiment(cfg,recorder)
-        await vision.start(); await fleet.start()
+        if vision is not None:
+            await vision.start()
+        await fleet.start()
         startup_end = time.monotonic()+float(cfg.system.get("startup_timeout_s",8))
         required = len(cfg.active_devices) if cfg.system.get("require_all_devices",True) else (1 if coverage_mode else 2)
         while sum(s.connected for s in fleet.states().values()) < required:
@@ -236,7 +243,8 @@ async def run_hardware(cfg,output=None,armed=False,progress=None):
         while time.monotonic()<end:
             now = time.monotonic()
             histories = {d.id:fleet.history(d.id) for d in cfg.active_devices}
-            actions = await asyncio.to_thread(experiment.process,now,dt,fleet.states(),vision.collect(),histories.get)
+            detections = () if coverage_mode else vision.collect()
+            actions = await asyncio.to_thread(experiment.process,now,dt,fleet.states(),detections,histories.get)
             if progress:
                 progress(experiment.latest)
             if experiment.latest.get("done"):
@@ -255,7 +263,10 @@ async def run_hardware(cfg,output=None,armed=False,progress=None):
         recorder.set_metadata(termination_reason=reason,
             coverage_completion_time_s=(experiment.coverage_tracker.completion_time_s if experiment.coverage_tracker else None))
     finally:
-        errors = await asyncio.gather(fleet.close(),vision.close(),return_exceptions=True)
+        closers = [fleet.close()]
+        if vision is not None:
+            closers.append(vision.close())
+        errors = await asyncio.gather(*closers,return_exceptions=True)
         for error in errors:
             if isinstance(error,BaseException):
                 completed = False
