@@ -1,0 +1,6 @@
+extends: coverage_common.yaml
+policy:
+  name: custom
+  custom: zr10lab.algorithms.time_aware_partition:TimeAwarePartitionPolicy
+  algorithm_id: tvp
+  tvp_balance_weight: 0.35
