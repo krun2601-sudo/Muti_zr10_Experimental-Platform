@@ -1,0 +1,5 @@
+extends: coverage_common.yaml
+policy:
+  name: custom
+  custom: zr10lab.algorithms.proposed:ProposedCoveragePolicy
+  algorithm_id: proposed
