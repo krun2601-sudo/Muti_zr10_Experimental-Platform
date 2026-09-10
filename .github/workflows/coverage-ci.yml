@@ -31,6 +31,10 @@ jobs:
         run: |
           python experiments/run_coverage_benchmark.py --algorithms fs,ewp,cg,tvp,vgls,opt --scenario-configs configs/coverage_smoke.yaml --seeds 7 --mode sim --output coverage_ci_runs --fail-fast
           python experiments/analyze_coverage_benchmark.py coverage_ci_runs --output coverage_ci_analysis --mc-samples 2000
+          echo '=== benchmark_runs.csv ==='
+          cat coverage_ci_analysis/benchmark_runs.csv
+          echo '=== benchmark_summary.csv ==='
+          cat coverage_ci_analysis/benchmark_summary.csv
       - name: Upload coverage smoke results
         if: always()
         uses: actions/upload-artifact@v4
