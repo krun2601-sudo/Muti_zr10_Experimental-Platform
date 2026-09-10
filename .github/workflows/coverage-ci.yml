@@ -25,7 +25,9 @@ jobs:
         run: python -m pytest -q
       - name: Validate strict coverage
         working-directory: zr10_cooperative_lab
-        run: python -m zr10lab validate --config configs/coverage_smoke.yaml
+        run: |
+          python -m zr10lab validate --config configs/coverage_smoke.yaml
+          python -m zr10lab validate --config configs/coverage_hardware_cg.yaml
       - name: Run coverage smoke benchmark
         working-directory: zr10_cooperative_lab
         run: |
