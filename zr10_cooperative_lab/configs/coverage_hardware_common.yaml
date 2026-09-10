@@ -1,0 +1,154 @@
+# 四台 ZR10 实机覆盖实验公共配置。
+#
+# 重要：本文件把“官网可确认的产品级参数”和“必须逐台实测/标定的参数”分开。
+# 官网/官方手册来源（核对日期：2026-09-10）：
+# - https://www.siyi.biz/en/product/tri-axis-single-camera-gimbal/zr10/spec/
+# - https://www.siyi.biz/zh/product/tri-axis-single-camera-gimbal/zr10/spec/
+# - https://www.siyi.biz/en/product/tri-axis-single-camera-gimbal/zr10/download/
+# - ZR10 User Manual / External SDK Protocol（官网当前下载页为 v1.9 / 2026-08）
+#
+# 官方中英文网页对 pitch/FOV 存在版本差异：
+#   中文：pitch -90..+25 deg；1X H=61.5 deg；10X H=7 deg
+#   英文：pitch -135..+45 deg；1X H=71.5 deg；10X H=6.7 deg
+# 为避免把“更宽的官网值”误当成所有批次都具备的能力，本实机模板采用保守交集：
+#   pitch [-90,+25]，yaw [-160,+160]，1X H=61.5，10X H=6.7。
+# 你的具体 4 台设备若经限位测试/固件确认支持更大范围，再修改并生成新的 problem_hash。
+
+extends: coverage_common.yaml
+
+system:
+  duration_s: 180
+  rate_hz: 10
+  telemetry_stale_s: 0.5
+  action_ttl_s: 0.5
+  require_all_devices: true
+  startup_timeout_s: 8
+
+policy:
+  # 无界面直接运行时默认使用 CG；控制中心可在 coverage_* 模式之间选择。
+  name: custom
+  custom: zr10lab.algorithms.cooperative_greedy:CooperativeGreedyPolicy
+  algorithm_id: cg
+  scenario_id: coverage_hardware_24x20_v1
+  policy_seed: 7
+
+  # 24 m x 20 m 场地：世界原点位于场地中心，x/y/z 单位均为 m。
+  # 任务核心区按此前实验设计使用 10 m x 8 m x 3 m。
+  roi:
+    x: [-5.0, 5.0]
+    y: [-4.0, 4.0]
+    z: [2.5, 5.5]
+
+  coverage:
+    enabled: true
+    evaluation_grid: [9, 7, 3]
+    candidate_grid: [5, 5, 3]
+    fixed_zoom: 1.0
+    fov_margin: 0.08
+    effective_range_m: 35.0
+    dwell_s: 0.30
+    settle_s: 0.20
+    settle_rate_dps: 0.75
+    arrival_tolerance_deg: 0.60
+    viewpoint_match_tolerance_deg: 2.0
+    zoom_tolerance: 0.05
+    min_target_pixels: 0.0
+    target_reference_size_m: 0.0
+    redundancy_threshold: 0.995
+    required_views: 1
+    completion_threshold: 1.0
+    open_path: true
+    planning_time_budget_s: 2.0
+    occlusion_model: none
+    detection_model: ideal_geometry
+
+    # 官网未给出可直接用于本研究 transition_time 的“绝对指向最大安全角速度/稳定时间”。
+    # 下列 25 deg/s 是保守的软件规划值，不是官网标称真值；正式实验应由实测 slew table 替换。
+    yaw_rate_dps: 25.0
+    pitch_rate_dps: 25.0
+    measured_slew_table: []
+
+simulation:
+  # 本文件也可以先在 sim 中验证几何。纯覆盖模式不使用目标真值。
+  seed: 7
+  targets: []
+  detection_probability: 1.0
+  pixel_noise_std: 0.0
+
+# 四台固定站位：S1=(-10,-8,1.5), S2=(10,-8,1.5), S3=(10,8,1.5), S4=(-10,8,1.5)
+# IP/SDK 端口：你的仓库 probe_result.json 已实测 192.168.144.25..28:37260 均可通信。
+# RTSP URL 保留当前平台约定；实际使用前仍应以设备标签/视频探测结果确认。
+#
+# calibration_verified 必须保持 false，直到逐台完成：
+# 1) position_m 实测；2) mount_rpy_deg 实测；3) yaw/pitch 符号与零位；
+# 4) 对当前固定 zoom 的相机内参/畸变；5) 实机限位；6) 必要的 slew-time 标定。
+# 网站产品参数不能替代这些站点级标定，因此代码会阻止未标定设备进入 --arm 实机闭环。
+devices:
+  - &zr10_hw
+    id: zr10_25
+    ip: 192.168.144.25
+    port: 37260
+    position_m: [-10.0, -8.0, 1.5]
+    mount_rpy_deg: [0.0, 0.0, 0.0]  # PLACEHOLDER：必须现场标定
+    calibration_verified: false
+    rtsp_url: rtsp://192.168.144.25:8554/main.264
+
+    # 当前官网中英文一致的 yaw 范围；pitch 采用中英文信息的保守值。
+    yaw_limits_deg: [-160.0, 160.0]
+    pitch_limits_deg: [-90.0, 25.0]
+    # 第一阶段只使用 1..10X 光学变焦；官网标称最高 30X 为混合变焦，不纳入几何覆盖模型。
+    zoom_limits: [1.0, 10.0]
+    initial_yaw_deg: 0.0
+    initial_pitch_deg: 0.0
+    initial_zoom: 1.0
+
+    # 非官网参数：只是控制软件的保守保护上限；正式数据前需实测。
+    max_slew_dps: 30.0
+    capabilities: {zoom: true, focus_direction: false, autofocus: false, gimbal_mode: false}
+    control:
+      mode: velocity_p
+      yaw_sign: 1
+      pitch_sign: 1
+      yaw_offset_deg: 0.0
+      pitch_offset_deg: 0.0
+      yaw_velocity_sign: 1
+      pitch_velocity_sign: -1
+      normalize_pitch_feedback: true
+      yaw_kp: 2.0
+      pitch_kp: 2.0
+      deadband_deg: 0.5
+      yaw_speed_limit: 25.0
+      pitch_speed_limit: 25.0
+      command_timeout_s: 0.25
+      use_ack: true
+
+    camera:
+      # 1920x1080 是本平台当前工作流的预设流尺寸，不是对所有 ZR10 流模式的断言。
+      # 官网还列出 2K/1080p/720p 录制能力；实机严格覆盖必须与实际 RTSP 输出一致。
+      image_size: [1920, 1080]
+      angular_std_deg: 0.15  # PLACEHOLDER：角度测量误差需标定，不等于官网 ±0.01° 抖动量
+      video_latency_s: 0.0   # PLACEHOLDER：需实测
+      time_uncertainty_s: 0.15
+      # nominal_only：由保守官网 FOV 推导，用于接线/预检/仿真，不可替代论文正式相机标定。
+      # 1X：H=61.5°, V=35.0°（官网中文页/FAQ）；10X：H=6.7°（官网英文页，取更窄值）。
+      intrinsics:
+        - {zoom: 1.0, fx: 1613.72, fy: 1712.66, cx: 960.0, cy: 540.0, dist: [0,0,0,0,0]}
+        - {zoom: 10.0, fx: 16399.0, fy: 16399.0, cx: 960.0, cy: 540.0, dist: [0,0,0,0,0]}
+
+  - <<: *zr10_hw
+    id: zr10_26
+    ip: 192.168.144.26
+    position_m: [10.0, -8.0, 1.5]
+    rtsp_url: rtsp://192.168.144.26:8554/main.264
+
+  - <<: *zr10_hw
+    id: zr10_27
+    ip: 192.168.144.27
+    position_m: [10.0, 8.0, 1.5]
+    rtsp_url: rtsp://192.168.144.27:8554/main.264
+
+  - <<: *zr10_hw
+    id: zr10_28
+    ip: 192.168.144.28
+    position_m: [-10.0, 8.0, 1.5]
+    rtsp_url: rtsp://192.168.144.28:8554/main.264
