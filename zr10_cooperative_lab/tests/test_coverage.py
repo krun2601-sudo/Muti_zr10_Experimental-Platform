@@ -5,7 +5,6 @@ import csv
 import json
 from pathlib import Path
 
-import numpy as np
 import pytest
 
 from zr10lab.actions import ActionValidator
@@ -14,13 +13,14 @@ from zr10lab.coverage import CoverageConfigurationError, CoverageProblem, Covera
 from zr10lab.geometry import intrinsics_at_zoom, project_world_points
 from zr10lab.models import CoverageSnapshot, PolicyContext, Telemetry
 from zr10lab.runtime import run_simulation
-from zr10lab.algorithms.coverage_base import verify_routes
+from zr10lab.algorithms.coverage_base import CoveragePlanningError, verify_routes
 from zr10lab.algorithms.fixed_sweep import FixedSweepPolicy
 from zr10lab.algorithms.equal_workload import EqualWorkloadPolicy
 from zr10lab.algorithms.cooperative_greedy import CooperativeGreedyPolicy
 from zr10lab.algorithms.time_aware_partition import TimeAwarePartitionPolicy
 from zr10lab.algorithms.viewpoint_local_search import ViewpointLocalSearchPolicy
 from zr10lab.algorithms.optimal_reference import OptimalReferencePolicy
+from zr10lab.algorithms.proposed import ProposedCoveragePolicy
 
 ROOT = Path(__file__).resolve().parents[1]
 SMOKE = ROOT / "configs" / "coverage_smoke.yaml"
@@ -36,9 +36,9 @@ def _states(cfg, problem, t=0.0):
             for d in cfg.active_devices}
 
 
-def _context(cfg, problem):
+def _context(cfg, problem, problem_hash=None):
     return PolicyContext(0.0, .1, 0, _states(cfg, problem),
-                         coverage=CoverageSnapshot(problem_hash=problem.problem_hash,
+                         coverage=CoverageSnapshot(problem_hash=problem.problem_hash if problem_hash is None else problem_hash,
                                                    visited_mask=tuple(False for _ in problem.cell_ids)))
 
 
@@ -58,6 +58,14 @@ def test_problem_hash_and_coverage_matrix_uses_project_world_points():
                 u, v = projected[m]
                 assert p1.fov_margin * intr.width <= u <= (1 - p1.fov_margin) * intr.width
                 assert p1.fov_margin * intr.height <= v <= (1 - p1.fov_margin) * intr.height
+
+
+def test_problem_hash_changes_when_shared_problem_changes():
+    cfg1 = _cfg(); p1 = CoverageProblem(cfg1)
+    cfg2 = _cfg(); cfg2.policy["coverage"]["fov_margin"] = 0.09; p2 = CoverageProblem(cfg2)
+    cfg3 = _cfg(); cfg3.policy["coverage"]["fixed_zoom"] = 1.2; p3 = CoverageProblem(cfg3)
+    assert p1.problem_hash != p2.problem_hash
+    assert p1.problem_hash != p3.problem_hash
 
 
 def test_tracker_does_not_cover_while_moving_or_before_dwell():
@@ -92,6 +100,40 @@ def test_all_baselines_plan_shared_feasible_problem_and_actions_validate(policy_
     for did, action in decision.actions.items():
         validator.validate(action, context.devices[did], context.t, context.dt)
         assert action.reason.startswith(policy.algorithm_id + ":")
+
+
+def test_vgls_is_reproducible_for_same_seed():
+    cfg1 = _cfg(); cfg1.policy["policy_seed"] = 2601; cfg1.policy["planning_time_budget_s"] = 1.0
+    cfg2 = _cfg(); cfg2.policy["policy_seed"] = 2601; cfg2.policy["planning_time_budget_s"] = 1.0
+    p1 = ViewpointLocalSearchPolicy(cfg1); p2 = ViewpointLocalSearchPolicy(cfg2)
+    r1 = p1.plan_routes(_context(cfg1, p1.problem)).routes
+    r2 = p2.plan_routes(_context(cfg2, p2.problem)).routes
+    assert r1 == r2
+
+
+def test_policy_rejects_problem_hash_mismatch():
+    cfg = _cfg(); policy = CooperativeGreedyPolicy(cfg)
+    with pytest.raises(CoveragePlanningError, match="problem_hash"):
+        policy.decide(_context(cfg, policy.problem, problem_hash="different-problem"))
+
+
+def test_multi_view_requirement_is_not_silently_solved_as_single_cover():
+    cfg = _cfg(); cfg.policy["coverage"]["required_views"] = 2
+    with pytest.raises(CoveragePlanningError, match="required_views=1"):
+        CooperativeGreedyPolicy(cfg)
+
+
+def test_proposed_is_explicit_placeholder_not_baseline_fallback():
+    cfg = _cfg(); policy = ProposedCoveragePolicy(cfg)
+    with pytest.raises(CoveragePlanningError, match="尚未定义本文创新算法"):
+        policy.plan_routes(_context(cfg, policy.problem))
+
+
+def test_opt_unsupported_size_fails_explicitly():
+    cfg = _cfg(); cfg.policy["opt_max_viewpoints_per_device"] = 0
+    policy = OptimalReferencePolicy(cfg)
+    with pytest.raises(CoveragePlanningError, match="unsupported_size"):
+        policy.plan_routes(_context(cfg, policy.problem))
 
 
 def test_algorithms_do_not_import_runtime_hardware_simulation_or_truth():
@@ -137,3 +179,8 @@ def test_small_simulation_completes_and_logs_consistently(tmp_path):
     assert metrics["coverage_fraction"] == pytest.approx(1.0)
     assert diagnostics["policy"]["done"] is True
     assert diagnostics["policy"]["problem_hash"] == metadata["problem_hash"]
+    # 纯覆盖仿真不读取/记录目标真值或检测器输出。
+    with (session / "truth.csv").open(encoding="utf-8-sig", newline="") as f:
+        assert list(csv.DictReader(f)) == []
+    with (session / "detections.csv").open(encoding="utf-8-sig", newline="") as f:
+        assert list(csv.DictReader(f)) == []
