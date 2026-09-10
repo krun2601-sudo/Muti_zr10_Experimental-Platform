@@ -1,0 +1,94 @@
+# 多固定光电设备严格覆盖实验的唯一公共问题配置。
+# 所有基线必须继承本文件，禁止在算法子配置中修改 ROI/FoV/候选集/时间模型。
+extends: four_zr10.yaml
+
+system:
+  duration_s: 120
+
+policy:
+  # 子配置会把 name/custom/algorithm_id 覆盖为具体算法。
+  scenario_id: coverage_nominal_v1
+  policy_seed: 7
+  roi:
+    x: [8.0, 22.0]
+    y: [-22.0, 22.0]
+    z: [8.0, 22.0]
+  coverage:
+    enabled: true
+    evaluation_grid: [5, 9, 3]
+    candidate_grid: [3, 5, 2]
+    fixed_zoom: 1.0
+    fov_margin: 0.08
+    effective_range_m: 120.0
+    dwell_s: 0.30
+    settle_s: 0.20
+    settle_rate_dps: 0.75
+    arrival_tolerance_deg: 0.60
+    viewpoint_match_tolerance_deg: 2.0
+    zoom_tolerance: 0.05
+    min_target_pixels: 0.0
+    target_reference_size_m: 0.0
+    redundancy_threshold: 0.995
+    required_views: 1
+    completion_threshold: 1.0
+    open_path: true
+    planning_time_budget_s: 2.0
+    # 第一阶段明确采用无遮挡 + 理想几何检测假设，不用仿真目标真值。
+    occlusion_model: none
+    detection_model: ideal_geometry
+    # 所有算法共享同一转动时间模型；实机标定后可替换为 measured_slew_table。
+    yaw_rate_dps: 25.0
+    pitch_rate_dps: 25.0
+    measured_slew_table: []
+
+simulation:
+  # 纯几何覆盖不读取 targets；保留空目标使 smoke/benchmark 不产生无关检测。
+  seed: 7
+  targets: []
+  detection_probability: 1.0
+  pixel_noise_std: 0.0
+
+control_center:
+  modes:
+    - id: coverage_fs
+      label: 覆盖-Fixed Sweep
+      description: 静态条带分区和固定蛇形扫描工程基线。
+      policy: zr10lab.algorithms.fixed_sweep:FixedSweepPolicy
+      requires_detection: false
+      requires_calibration: true
+    - id: coverage_ewp
+      label: 覆盖-Equal Workload
+      description: 按预计扫描时间平衡设备工作量。
+      policy: zr10lab.algorithms.equal_workload:EqualWorkloadPolicy
+      requires_detection: false
+      requires_calibration: true
+    - id: coverage_cg
+      label: 覆盖-Cooperative Greedy
+      description: 单位时间新增覆盖收益的协同贪心。
+      policy: zr10lab.algorithms.cooperative_greedy:CooperativeGreedyPolicy
+      requires_detection: false
+      requires_calibration: true
+    - id: coverage_tvp
+      label: 覆盖-Time-aware Partition
+      description: 基于云台时间代价的区域分解。
+      policy: zr10lab.algorithms.time_aware_partition:TimeAwarePartitionPolicy
+      requires_detection: false
+      requires_calibration: true
+    - id: coverage_vgls
+      label: 覆盖-Viewpoint Local Search
+      description: Viewpoint图上的MCPP式局部搜索强基线。
+      policy: zr10lab.algorithms.viewpoint_local_search:ViewpointLocalSearchPolicy
+      requires_detection: false
+      requires_calibration: true
+    - id: coverage_opt
+      label: 覆盖-OPT Offline Oracle
+      description: 小规模精确/有界离线参考；大规模明确拒绝。
+      policy: zr10lab.algorithms.optimal_reference:OptimalReferencePolicy
+      requires_detection: false
+      requires_calibration: true
+    - id: coverage_proposed
+      label: 覆盖-Proposed接口
+      description: 本文创新方法预留入口，当前不会伪装成任何基线。
+      policy: zr10lab.algorithms.proposed:ProposedCoveragePolicy
+      requires_detection: false
+      requires_calibration: true
