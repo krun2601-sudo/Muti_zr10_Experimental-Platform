@@ -1,0 +1,5 @@
+extends: coverage_hardware_common.yaml
+policy:
+  name: custom
+  custom: zr10lab.algorithms.viewpoint_local_search:ViewpointLocalSearchPolicy
+  algorithm_id: vgls
