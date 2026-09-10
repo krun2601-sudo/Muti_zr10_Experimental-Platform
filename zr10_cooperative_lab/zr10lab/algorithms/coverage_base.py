@@ -13,7 +13,7 @@ from typing import Iterable, Sequence
 
 import numpy as np
 
-from ..coverage import CoverageConfigurationError, CoverageProblem
+from ..coverage import CoverageProblem
 from ..models import Action, Decision, PolicyContext, Telemetry
 
 
@@ -132,6 +132,10 @@ def assigned_cells_to_routes(problem: CoverageProblem, assignments: dict[str, se
 
 
 def verify_routes(problem: CoverageProblem, routes: dict[str, Sequence[str]]) -> None:
+    if problem.required_views != 1:
+        raise CoveragePlanningError(
+            "当前 FS/EWP/CG/TVP/VGLS/OPT 基线只定义单站搜索覆盖(required_views=1)；"
+            "多重覆盖必须使用专门的 multi-cover planner，不能静默按单覆盖求解。")
     unknown = [(d, vid) for d, route in routes.items() for vid in route
                if vid not in problem.viewpoint_lookup or problem.viewpoint_lookup[vid].device_id != d]
     if unknown:
@@ -147,12 +151,16 @@ class CoverageRoutePolicy:
     """所有离线路线型覆盖算法的统一执行状态机。"""
 
     algorithm_id = "coverage_base"
-    algorithm_version = "1.0"
+    algorithm_version = "1.1"
 
     def __init__(self, cfg):
         self.cfg = cfg
         self.problem = CoverageProblem(cfg)
         self.problem.assert_feasible()
+        if self.problem.required_views != 1:
+            raise CoveragePlanningError(
+                "当前时间最优扫描基线只支持 required_views=1；"
+                "该限制显式失败以避免把多站定位覆盖误当成单站搜索覆盖。")
         self.devices = self.problem.devices
         self.ttl_s = float(cfg.system.get("action_ttl_s", .5))
         self.angle_tolerance_deg = float(self.problem.options.get("arrival_tolerance_deg", .6))
@@ -161,12 +169,9 @@ class CoverageRoutePolicy:
     def reset(self):
         self._plan: RoutePlan | None = None
         self._planning_ms = 0.0
-        self._route_index = {d: 0 for d in getattr(self, "problem", type("X", (), {"device_ids": ()})()).device_ids} if False else {}
-        if hasattr(self, "problem"):
-            self._route_index = {d: 0 for d in self.problem.device_ids}
-        self._stable_since: dict[str, float | None] = {d: None for d in getattr(self, "problem", type("X", (), {"device_ids": ()})()).device_ids} if False else {}
-        if hasattr(self, "problem"):
-            self._stable_since = {d: None for d in self.problem.device_ids}
+        device_ids = self.problem.device_ids if hasattr(self, "problem") else ()
+        self._route_index = {d: 0 for d in device_ids}
+        self._stable_since: dict[str, float | None] = {d: None for d in device_ids}
 
     def plan_routes(self, context: PolicyContext) -> RoutePlan:
         raise NotImplementedError
