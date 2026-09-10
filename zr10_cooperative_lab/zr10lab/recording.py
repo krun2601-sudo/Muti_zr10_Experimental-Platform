@@ -10,6 +10,7 @@ import hashlib
 import json
 import platform
 import queue
+import subprocess
 import threading
 import time
 from dataclasses import asdict, is_dataclass
@@ -30,8 +31,8 @@ SCHEMAS = {
     "events": ["kind","payload_json"],
     "cycles": ["step","dt_s","work_ms","deadline_miss","detections","rays","localizations","tracks","measured_tracks","metrics_json","diagnostics_json"],
     "truth": ["truth_id","x_m","y_m","z_m"],
+    "coverage_cells": ["cell_id","x_m","y_m","z_m","first_covered_t_s","device_ids_json","viewpoint_ids_json","required_views"],
 }
-# 同字段的原始反馈流与决策快照分开，避免把控制频率误当传感器频率。
 SCHEMAS["telemetry_stream"] = list(SCHEMAS["telemetry"])
 
 
@@ -53,6 +54,16 @@ def dumps(value: Any) -> str:
     return json.dumps(jsonable(value),ensure_ascii=False,separators=(",",":"),allow_nan=False)
 
 
+def _git_revision() -> str | None:
+    try:
+        root = Path(__file__).resolve().parent
+        out = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root,
+                                      stderr=subprocess.DEVNULL, timeout=2, text=True).strip()
+        return out or None
+    except Exception:
+        return None
+
+
 class CSVRecorder:
     def __init__(self, root: str | Path, config: dict, mode: str, start_t: float = 0.0):
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%fZ")
@@ -68,22 +79,31 @@ class CSVRecorder:
         self.closed = False
         self._files = {}
         self._writers = {}
+        self._metadata_lock = threading.Lock()
         for name, columns in SCHEMAS.items():
             stream = (self.path/f"{name}.csv").open("w",newline="",encoding="utf-8-sig")
             writer = csv.DictWriter(stream,fieldnames=["schema_version","run_id","utc","t_s",*columns])
             writer.writeheader()
             self._files[name],self._writers[name] = stream,writer
-        self.metadata = {"schema_version":1,"platform_version":__version__,"mode":mode,
+        self.metadata = {"schema_version":2,"platform_version":__version__,"mode":mode,
             "run_id":self.run_id,"created_utc":datetime.now(timezone.utc).isoformat(),
             "python":platform.python_version(),"os":platform.platform(),"start_t":start_t,
             "time_basis":"simulation_seconds" if mode=="sim" else "host_monotonic_seconds",
-            "config":config,"completed":False}
+            "config":config,"completed":False,"git_revision":_git_revision()}
         self._write_json("metadata.json",self.metadata)
         self._thread = threading.Thread(target=self._work,name="csv-recorder",daemon=True)
         self._thread.start()
 
     def _write_json(self,name,value):
         (self.path/name).write_text(json.dumps(jsonable(value),ensure_ascii=False,indent=2),encoding="utf-8")
+
+    def set_metadata(self, **values: Any) -> None:
+        """补充会话级可追溯信息；调用频率应低，不在逐周期热路径使用。"""
+        if self.closed:
+            raise RuntimeError("日志已关闭")
+        with self._metadata_lock:
+            self.metadata.update(jsonable(values))
+            self._write_json("metadata.json", self.metadata)
 
     def check(self) -> None:
         if self.error:
@@ -95,9 +115,8 @@ class CSVRecorder:
             raise RuntimeError("日志已关闭")
         if table not in SCHEMAS or set(values)-set(SCHEMAS[table]):
             raise ValueError(f"日志表或字段不合法: {table}: {set(values)-set(SCHEMAS.get(table,[]))}")
-        # 实时时钟对应实验时刻，仿真加速时 UTC 仅是仿真映射时间，metadata 明确说明。
         epoch = self.created_epoch + t-self.start_t
-        row = {"schema_version":1,"run_id":self.run_id,
+        row = {"schema_version":2,"run_id":self.run_id,
             "utc":datetime.fromtimestamp(epoch,timezone.utc).isoformat(timespec="milliseconds"),
             "t_s":t-self.start_t,**values}
         try:
@@ -139,7 +158,6 @@ class CSVRecorder:
         if self.closed:
             return
         self.closed = True
-        # 队列可能很满，用短超时循环检查线程健康，不在 queue.join 永久卡死。
         while self._thread.is_alive():
             try:
                 self.q.put(None,timeout=.1)
@@ -149,9 +167,10 @@ class CSVRecorder:
         self._thread.join(timeout=15)
         if self._thread.is_alive():
             raise RuntimeError("CSV 日志未能在15秒内完成刷新")
-        self.metadata.update(completed=bool(completed and not self.error),rows=self.counts,
-                             error=str(self.error) if self.error else "")
-        self._write_json("metadata.json",self.metadata)
+        with self._metadata_lock:
+            self.metadata.update(completed=bool(completed and not self.error),rows=self.counts,
+                                 error=str(self.error) if self.error else "")
+            self._write_json("metadata.json",self.metadata)
         manifest = {p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in self.path.glob("*.csv")}
         self._write_json("manifest.sha256.json",manifest)
         self.check()
