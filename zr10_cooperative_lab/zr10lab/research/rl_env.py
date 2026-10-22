@@ -33,7 +33,6 @@ class ResearchObservationEncoder:
         self.age_cap = float(research.get("search", {}).get("age_cap_s", 120.0))
         self.position_scale = float(research.get("learning", {}).get("position_scale_m", 200.0))
         self.velocity_scale = float(research.get("learning", {}).get("velocity_scale_mps", 10.0))
-        # own device 7 + each target 10 + each stale cell 3 + global 3
         self.obs_dim = 7 + self.max_targets * 10 + self.top_search_cells * 3 + 3
 
     def encode(self, context: PolicyContext) -> np.ndarray:
@@ -116,7 +115,14 @@ class ResearchObservationEncoder:
 
 
 class ResearchMARLEnv:
-    """Small deterministic CTDE environment with shared team reward and safety cost."""
+    """CTDE environment sharing the paper task's execution and event semantics.
+
+    One learning action is held for at most ``replan_period_s``. If the same
+    discrete task event used by ResearchExperiment occurs earlier, ``step`` returns
+    early so the learned policy receives the same opportunity to replan. The PPO
+    implementation still uses a per-decision discount; this is an explicit learning
+    approximation when event intervals are shorter than the nominal period.
+    """
 
     def __init__(self, cfg, seed=0, max_targets=6, top_search_cells=8):
         self.cfg = copy.deepcopy(cfg)
@@ -124,32 +130,27 @@ class ResearchMARLEnv:
         self.seed = int(seed)
         self.encoder = ResearchObservationEncoder(self.cfg, max_targets, top_search_cells)
         self.dt = 1.0 / float(self.cfg.system.get("rate_hz", 10))
-        replan = float(self.cfg.policy.get("research", {}).get("planning", {}).get("replan_period_s", 0.5))
+        planning = self.cfg.policy.get("research", {}).get("planning", {})
+        replan = float(planning.get("replan_period_s", 0.5))
+        self.event_replan = bool(planning.get("event_replan", True))
         self.frame_skip = max(1, int(round(replan / self.dt)))
-        self.max_steps = max(1, int(math.ceil(float(self.cfg.system.get("duration_s", 60)) / (self.frame_skip * self.dt))))
+        self.duration_s = float(self.cfg.system.get("duration_s", 60))
         learning = self.cfg.policy.get("research", {}).get("learning", {})
         self.loss_penalty = float(learning.get("loss_penalty", 8.0))
         self.search_age_weight = float(learning.get("search_age_weight", 1.0))
         self.discovery_bonus = float(learning.get("discovery_bonus", 2.0))
         self.motion_weight = float(learning.get("motion_weight", 0.05))
-        self._world = None
-        self._mission = None
-        self._context = None
-        self._decision_step = 0
-        self._previous_discovered = 0
+        self._world = None; self._mission = None; self._context = None
+        self._decision_step = 0; self._previous_discovered = 0
         self._previous_actions = np.zeros((len(self.cfg.active_devices), 3), dtype=float)
+        self._last_event_signature = None
 
     @property
-    def n_agents(self):
-        return len(self.cfg.active_devices)
-
+    def n_agents(self): return len(self.cfg.active_devices)
     @property
-    def obs_dim(self):
-        return self.encoder.obs_dim
-
+    def obs_dim(self): return self.encoder.obs_dim
     @property
-    def action_dim(self):
-        return 3
+    def action_dim(self): return 3
 
     def _context_from(self, states, step):
         m = self._mission
@@ -164,17 +165,21 @@ class ResearchMARLEnv:
                                  "planning": dict(self.cfg.policy.get("research", {}).get("planning", {})),
                              })
 
+    @staticmethod
+    def _event_signature(context):
+        tracks = tuple(sorted((tr.track_id, tr.status, tuple(sorted(set(tr.device_ids)))) for tr in context.tracks))
+        devices = tuple(sorted((key, bool(state.connected)) for key, state in context.devices.items()))
+        return tracks, devices
+
     def reset(self, seed=None):
-        if seed is not None:
-            self.seed = int(seed)
+        if seed is not None: self.seed = int(seed)
         self.cfg.simulation["seed"] = self.seed
         self.cfg.policy.setdefault("research", {}).setdefault("perception", {})["seed"] = self.seed
-        self._world = SimulationWorld(self.cfg)
-        self._world.reset(seed=self.seed)
+        self._world = SimulationWorld(self.cfg); self._world.reset(seed=self.seed)
         self._mission = SearchMonitorMission(self.cfg)
-        states = self._world.states()
-        self._mission.step(self._world.t, self.dt, states)
+        states = self._world.states(); self._mission.step(self._world.t, self.dt, states)
         self._context = self._context_from(states, 0)
+        self._last_event_signature = self._event_signature(self._context)
         self._decision_step = 0
         self._previous_discovered = self._mission.last_perception.discovered_active_count
         self._previous_actions.fill(0.0)
@@ -186,12 +191,10 @@ class ResearchMARLEnv:
             raise RuntimeError("reset() must be called before step()")
         action = np.asarray(action, dtype=float)
         commands = self.encoder.decode(action, self._context, "mappo_training")
-        reward_total = 0.0
-        cost_total = 0.0
+        reward_total = 0.0; cost_total = 0.0; frames = 0; event_triggered = False
         for _ in range(self.frame_skip):
             self._world.advance(commands, self.dt)
-            states = self._world.states()
-            self._mission.step(self._world.t, self.dt, states)
+            states = self._world.states(); self._mission.step(self._world.t, self.dt, states)
             status = self._mission.last_perception.target_status
             discovered = [x for x in status if x.discovered]
             lost = sum(not bool(x.visible_devices) for x in discovered)
@@ -199,21 +202,27 @@ class ResearchMARLEnv:
             self._previous_discovered = self._mission.last_perception.discovered_active_count
             age_mean = float(np.mean(self._mission.last_search.ages_s))
             age_cap = float(self.cfg.policy.get("research", {}).get("search", {}).get("age_cap_s", 120.0))
-            reward = (self.discovery_bonus * new_discovered - self.loss_penalty * lost
-                      - self.search_age_weight * age_mean / max(age_cap, 1e-9))
-            reward_total += reward
-            cost_total += lost / max(len(discovered), 1)
+            reward_total += (self.discovery_bonus * new_discovered - self.loss_penalty * lost
+                             - self.search_age_weight * age_mean / max(age_cap, 1e-9))
+            cost_total += lost / max(len(discovered), 1); frames += 1
+            provisional = self._context_from(states, self._decision_step + 1)
+            signature = self._event_signature(provisional)
+            if self.event_replan and signature != self._last_event_signature:
+                event_triggered = True
+                self._context = provisional
+                self._last_event_signature = signature
+                break
+            self._context = provisional
+            self._last_event_signature = signature
+            if self._world.t >= self.duration_s - 1e-12:
+                break
         motion = float(np.mean(np.abs(action - self._previous_actions)))
         reward_total -= self.motion_weight * motion
-        self._previous_actions = action.copy()
-        self._decision_step += 1
-        states = self._world.states()
-        self._context = self._context_from(states, self._decision_step)
+        self._previous_actions = action.copy(); self._decision_step += 1
         obs = self.encoder.encode(self._context)
-        done = self._decision_step >= self.max_steps
-        info = {
-            "metrics": dict(self._mission.last_metrics),
-            "time_s": self._world.t,
-            "cost": float(cost_total / self.frame_skip),
-        }
-        return obs, obs.reshape(-1).copy(), float(reward_total / self.frame_skip), float(cost_total / self.frame_skip), done, info
+        done = self._world.t >= self.duration_s - 1e-12
+        denominator = max(frames, 1)
+        info = {"metrics": dict(self._mission.last_metrics), "time_s": self._world.t,
+                "cost": float(cost_total / denominator), "frames_executed": frames,
+                "event_triggered": bool(event_triggered)}
+        return obs, obs.reshape(-1).copy(), float(reward_total / denominator), float(cost_total / denominator), done, info
