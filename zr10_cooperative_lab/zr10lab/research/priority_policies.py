@@ -2,7 +2,22 @@ from __future__ import annotations
 
 from ..models import Decision
 from .optimization import PriorityHorizonMILP
+from .planning import PrimitiveFactory
 from .policies import ECPRHPolicy, WeightedRHPolicy
+
+
+class _ConfigurableExecutionFactory(PrimitiveFactory):
+    """Keep the physical simulator fixed while optionally hiding transition time from the planner."""
+
+    def __init__(self, cfg):
+        super().__init__(cfg)
+        self.use_execution_model = bool(
+            cfg.policy.get("research", {}).get("planning", {}).get("use_execution_model", True))
+
+    def _transition_s(self, state, device, yaw: float, pitch: float, zoom: float) -> float:
+        if not self.use_execution_model:
+            return 0.0
+        return super()._transition_s(state, device, yaw, pitch, zoom)
 
 
 def _guaranteed_targets_h1(ps, selected) -> list[str]:
@@ -19,6 +34,10 @@ def _guaranteed_targets_h1(ps, selected) -> list[str]:
 class PriorityECPRHPolicy(ECPRHPolicy):
     """ECP-RH implementation using the always-feasible soft-overlap MILP."""
 
+    def __init__(self, cfg):
+        super().__init__(cfg)
+        self.factory = _ConfigurableExecutionFactory(cfg)
+
     def decide(self, context):
         self._check(context)
         ps = self.factory.generate(context)
@@ -33,6 +52,7 @@ class PriorityECPRHPolicy(ECPRHPolicy):
             "ecprh", diag,
             target_count=len(ps.target_ids),
             overlap_requirements=len(ps.overlap_requirements),
+            use_execution_model=self.factory.use_execution_model,
             guaranteed_targets_h1=_guaranteed_targets_h1(ps, selected),
             risk_check_delay_s=float(ps.slot_s),
         ))
@@ -43,6 +63,7 @@ class PriorityWeightedRHPolicy(WeightedRHPolicy):
 
     def __init__(self, cfg):
         super().__init__(cfg)
+        self.factory = _ConfigurableExecutionFactory(cfg)
         weights = cfg.policy.get("research", {}).get("baselines", {}).get("weighted_rh", {})
         self.overlap_weight = float(weights.get("overlap_weight", 3.0))
 
@@ -62,5 +83,6 @@ class PriorityWeightedRHPolicy(WeightedRHPolicy):
         return Decision(actions, self._diag("weighted_rh", diag, weights={
             "loss": self.loss_weight, "overlap": self.overlap_weight,
             "search": self.search_weight, "motion": self.motion_weight,
-        }, guaranteed_targets_h1=_guaranteed_targets_h1(ps, selected),
+        }, use_execution_model=self.factory.use_execution_model,
+            guaranteed_targets_h1=_guaranteed_targets_h1(ps, selected),
             risk_check_delay_s=float(ps.slot_s)))
