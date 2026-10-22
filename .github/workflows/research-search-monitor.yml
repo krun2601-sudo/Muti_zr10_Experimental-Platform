@@ -30,7 +30,7 @@ jobs:
           python -m compileall -q zr10_cooperative_lab/zr10lab/models.py zr10_cooperative_lab/zr10lab/recording.py
       - name: Run research correctness tests
         working-directory: zr10_cooperative_lab
-        run: pytest -q tests/test_research_search_monitor.py tests/test_research_cadence.py
+        run: pytest -q tests/test_research_search_monitor.py tests/test_research_cadence.py tests/test_research_priority_metrics.py
       - name: Run core platform regression subset
         working-directory: zr10_cooperative_lab
         run: pytest -q tests/test_geometry.py tests/test_learning.py tests/test_control_modes.py
