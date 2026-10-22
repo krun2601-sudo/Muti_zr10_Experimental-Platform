@@ -1,0 +1,15 @@
+extends: ../search_monitor_base.yaml
+system: {duration_s: 70}
+policy:
+  research:
+    scenario:
+      id: S1-single
+      roi: {x: [100,160], y: [-50,50], z: [35,85]}
+      remove_outside_roi: true
+      targets:
+        - id: private_target_1
+          start_s: 8
+          end_s: 70
+          trajectory: cv
+          position_m: [100,-42,58]
+          velocity_mps: [1.8,1.15,0.08]
