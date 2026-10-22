@@ -1,0 +1,6 @@
+extends: ../search_monitor_base.yaml
+
+policy:
+  research:
+    planning:
+      event_replan: false
