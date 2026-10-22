@@ -44,14 +44,7 @@ class ResearchExperiment(Experiment):
 
     @staticmethod
     def _event_signature(context: PolicyContext):
-        """Only discrete information changes trigger an off-cycle replan.
-
-        Continuous target state estimates and search ages deliberately do not enter
-        this signature; otherwise every measurement would collapse the nominal
-        0.5 s planning period back to the actuator rate. New/lost tracks, a change
-        in the set of cameras currently supporting a track, coasting/confirmed
-        transitions, or a device connection edge are treated as task events.
-        """
+        """Only discrete information changes trigger an off-cycle replan."""
         tracks = tuple(sorted(
             (tr.track_id, tr.status, tuple(sorted(set(tr.device_ids))))
             for tr in context.tracks
@@ -60,12 +53,6 @@ class ResearchExperiment(Experiment):
         return tracks, devices
 
     def _invalidate_policy_internal_cache(self) -> None:
-        """Allow a policy with its own inference cache to honor common task events.
-
-        MAPPO keeps a lightweight cache for standalone use. The research runner is
-        the authoritative cadence controller, so on an event we invalidate that
-        cache without resetting learned parameters or stateful scan indices.
-        """
         invalidate = getattr(self.policy, "invalidate_plan", None)
         if callable(invalidate):
             invalidate()
@@ -78,8 +65,6 @@ class ResearchExperiment(Experiment):
                 pass
 
     def _decide(self, context: PolicyContext) -> tuple[Decision, bool, str, float]:
-        # A control-center mode change swaps the policy object in-place. Never let
-        # actions from the old mode survive until the next nominal planning tick.
         if id(self.policy) != self._policy_identity:
             self._policy_identity = id(self.policy)
             self._cached_policy_actions = {}
@@ -108,8 +93,6 @@ class ResearchExperiment(Experiment):
                                decision_compute_ms=compute_ms, plan_age_s=0.0)
             return Decision(dict(decision.actions), diagnostics), True, reason, compute_ms
 
-        # Renew the lease but do not alter the target set-point. The simulator and
-        # physical mirror therefore keep executing the same command between plans.
         actions = {key: replace(action, issued_t=context.t)
                    for key, action in self._cached_policy_actions.items()}
         diagnostics = dict(self._cached_policy_diagnostics)
@@ -127,6 +110,17 @@ class ResearchExperiment(Experiment):
             research=mission_step.policy_payload,
         )
         decision, replanned, replan_reason, decision_compute_ms = self._decide(context)
+
+        # Model-based RH policies expose only anonymous track IDs predicted safely
+        # visible in the next horizon slot. Evaluation resolves those IDs privately
+        # at the due time. A newer event-triggered plan replaces the pending check.
+        if replanned and isinstance(decision.diagnostics, dict):
+            guaranteed = decision.diagnostics.get("guaranteed_targets_h1")
+            delay = decision.diagnostics.get("risk_check_delay_s")
+            if guaranteed is not None and delay is not None:
+                self.mission.evaluator.register_risk_prediction(
+                    float(t) + max(0.0, float(delay)), guaranteed)
+
         requested = action_transform(decision.actions) if action_transform else decision.actions
         actions = {}
         for key, action in requested.items():
@@ -142,18 +136,12 @@ class ResearchExperiment(Experiment):
 
         execution = self.execution.update(
             dt, states, getattr(self.mission, "last_readiness", {}), actions, replanned)
-        # MissionStep.metrics is an experiment-side mutable dictionary even though
-        # the MissionStep container is frozen. Policies never receive this object.
         mission_step.metrics.update(execution.metrics())
 
-        # Reuse the platform's standard tables. Research truth is evaluation-only
-        # and never appears in the PolicyContext above.
         self._record(t, states, mission_step.detections, (), mission_step.tracks, (), actions,
                      mission_step.truth_positions)
         self.mission.record(self.recorder, t)
         solver = decision.diagnostics.get("solver") if isinstance(decision.diagnostics, dict) else None
-        # A solver row represents one actual planning call, not each 10 Hz lease
-        # renewal. This makes solve-count/latency statistics physically meaningful.
         if replanned and isinstance(solver, dict):
             self.recorder.write(
                 "research_solver", t,
