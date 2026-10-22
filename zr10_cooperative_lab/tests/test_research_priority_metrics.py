@@ -63,6 +63,24 @@ def test_empirical_risk_prediction_counts_only_due_active_targets():
     assert after["research_empirical_risk_violation_rate"] == pytest.approx(1.0)
 
 
+def test_undiscovered_target_is_explicit_failure_not_zero_loss_success():
+    evaluator = ResearchEvaluator()
+    unseen = ResearchTargetStatus(
+        truth_id="private-missed", track_id=None, active=True,
+        discovered=False, visible_devices=(), sensing_devices=(),
+        discovery_t=None, current_loss_gap_s=0.0, longest_loss_gap_s=0.0,
+    )
+    evaluator.update(0.0, 0.1, (unseen,), None)
+    metrics = evaluator.update(2.0, 0.1, (unseen,), None)
+    # Monitoring loss remains post-discovery by definition, but discovery failure
+    # is now first-class and therefore cannot masquerade as a perfect policy.
+    assert metrics["research_total_loss_s"] == pytest.approx(0.0)
+    assert metrics["research_missed_target_count"] == 1
+    assert metrics["research_missed_target_rate"] == pytest.approx(1.0)
+    assert metrics["research_discovery_rate"] == pytest.approx(0.0)
+    assert metrics["research_detection_delay_censored_p95_s"] == pytest.approx(2.0)
+
+
 def test_execution_metrics_use_actual_virtual_feedback_not_requested_jump():
     evaluator = ExecutionEvaluator()
     ready = {"cam": DeviceReadiness("cam", True, 0.0, "ready")}
