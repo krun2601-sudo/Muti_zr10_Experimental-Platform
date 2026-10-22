@@ -1,0 +1,23 @@
+extends: ../search_monitor_base.yaml
+system: {duration_s: 85}
+simulation:
+  zoom_rate_per_s: 1.5
+policy:
+  research:
+    execution:
+      settle_s: 0.45
+      zoom_rate_per_s: 1.5
+    perception:
+      detection_probability: 0.88
+      position_noise_std_m: 2.2
+      velocity_noise_std_mps: 0.55
+      process_noise_m2ps: 0.65
+      initial_covariance_m2: 4.0
+    scenario:
+      id: S9b-ood-delay-noise
+      roi: {x: [100,160], y: [-50,50], z: [35,85]}
+      remove_outside_roi: true
+      targets:
+        - {id: private_target_1, start_s: 7, end_s: 74, trajectory: cv, position_m: [100,-42,52], velocity_mps: [1.9,1.0,0.10]}
+        - {id: private_target_2, start_s: 19, end_s: 82, trajectory: turn, position_m: [102,34,70], speed_mps: 2.3, heading_deg: -22, turn_rate_dps: -3.0, climb_mps: -0.05}
+        - {id: private_target_3, start_s: 31, end_s: 85, trajectory: cv, position_m: [104,-3,80], velocity_mps: [1.6,-0.15,-0.10]}
