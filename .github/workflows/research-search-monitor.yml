@@ -1,0 +1,31 @@
+name: research-search-monitor
+
+on:
+  push:
+    branches: ["research/ecp-rh-experiments"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  research-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: zr10_cooperative_lab/pyproject.toml
+      - name: Install minimal research dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy scipy PyYAML opencv-python-headless pytest
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - name: Compile research modules
+        run: python -m compileall -q zr10_cooperative_lab/zr10lab/research
+      - name: Run research correctness tests
+        working-directory: zr10_cooperative_lab
+        run: pytest -q tests/test_research_search_monitor.py
