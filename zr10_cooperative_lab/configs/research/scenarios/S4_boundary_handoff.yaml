@@ -1,0 +1,19 @@
+extends: ../search_monitor_base.yaml
+system: {duration_s: 75}
+policy:
+  research:
+    scenario:
+      id: S4-boundary-handoff
+      roi: {x: [100,160], y: [-50,50], z: [35,85]}
+      remove_outside_roi: true
+      targets:
+        - id: private_target_1
+          start_s: 5
+          end_s: 75
+          trajectory: waypoint
+          waypoints:
+            - {t_s: 5, position_m: [101,-47,48]}
+            - {t_s: 22, position_m: [124,-8,58]}
+            - {t_s: 39, position_m: [150,43,66]}
+            - {t_s: 55, position_m: [132,3,74]}
+            - {t_s: 72, position_m: [158,-45,80]}
