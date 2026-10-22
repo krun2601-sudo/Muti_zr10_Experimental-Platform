@@ -30,6 +30,11 @@ SCHEMAS = {
     "events": ["kind","payload_json"],
     "cycles": ["step","dt_s","work_ms","deadline_miss","detections","rays","localizations","tracks","measured_tracks","metrics_json","diagnostics_json"],
     "truth": ["truth_id","x_m","y_m","z_m"],
+    # Research-only tables are created for every run so schemas remain stable.
+    # Non-research runs simply leave them empty.
+    "research_targets": ["truth_id","track_id","active","discovered","visible_devices_json","sensing_devices_json","discovery_t","current_loss_gap_s","longest_loss_gap_s"],
+    "research_search": ["cell_count","observed_count","mean_age_s","p95_age_s","max_age_s","ages_json","observed_json"],
+    "research_solver": ["method","status","solve_ms","mip_gap","level1","level2","level3","candidate_count","timeout","extras_json"],
 }
 # 同字段的原始反馈流与决策快照分开，避免把控制频率误当传感器频率。
 SCHEMAS["telemetry_stream"] = list(SCHEMAS["telemetry"])
@@ -76,7 +81,7 @@ class CSVRecorder:
         self.metadata = {"schema_version":1,"platform_version":__version__,"mode":mode,
             "run_id":self.run_id,"created_utc":datetime.now(timezone.utc).isoformat(),
             "python":platform.python_version(),"os":platform.platform(),"start_t":start_t,
-            "time_basis":"simulation_seconds" if mode=="sim" else "host_monotonic_seconds",
+            "time_basis":"simulation_seconds" if mode in ("sim","mirror") else "host_monotonic_seconds",
             "config":config,"completed":False}
         self._write_json("metadata.json",self.metadata)
         self._thread = threading.Thread(target=self._work,name="csv-recorder",daemon=True)
@@ -107,7 +112,7 @@ class CSVRecorder:
 
     def event(self,kind: str,payload: dict,t: float | None = None):
         if t is None:
-            t = time.monotonic() if self.mode!="sim" else self.start_t
+            t = time.monotonic() if self.mode not in ("sim","mirror") else self.start_t
         self.write("events",t,kind=kind,payload_json=dumps(payload))
 
     def _work(self):
