@@ -12,7 +12,7 @@ from scipy.sparse import coo_matrix
 from scipy.stats import norm
 
 from ..geometry import intrinsics_at_zoom, project_world_points, world_to_gimbal_angles
-from ..models import Action, PolicyContext, Telemetry, Track
+from ..models import Action, PolicyContext, Telemetry
 from .types import SolverDiagnostics
 
 
@@ -24,13 +24,11 @@ def angle_delta_deg(a: float, b: float) -> float:
 def _zoom_levels(device, configured) -> list[float]:
     lo, hi = map(float, device.zoom_limits)
     levels = configured or [lo, (lo + hi) / 2.0, hi]
-    result = sorted({float(np.clip(float(z), lo, hi)) for z in levels})
-    return result
+    return sorted({float(np.clip(float(z), lo, hi)) for z in levels})
 
 
 def _half_fov_deg(device, zoom: float) -> tuple[float, float]:
     k = intrinsics_at_zoom(device, zoom)
-    # Conservative symmetric half-angle around the calibrated principal point.
     hx_px = max(1e-9, min(k.cx, k.width - k.cx))
     hy_px = max(1e-9, min(k.cy, k.height - k.cy))
     return math.degrees(math.atan(hx_px / k.fx)), math.degrees(math.atan(hy_px / k.fy))
@@ -39,9 +37,9 @@ def _half_fov_deg(device, zoom: float) -> tuple[float, float]:
 @dataclass(frozen=True)
 class PredictedTrack:
     track_id: str
-    positions: np.ndarray  # H x 3
-    covariances: np.ndarray  # H x 3 x 3
-    speeds: np.ndarray  # H
+    positions: np.ndarray
+    covariances: np.ndarray
+    speeds: np.ndarray
     current_devices: tuple[str, ...]
 
 
@@ -56,8 +54,8 @@ class Primitive:
     target_ids: tuple[str, ...]
     transition_s: float
     ready_slot: int
-    visibility: np.ndarray  # n_targets x H, bool
-    search_coverage: np.ndarray  # n_cells x H, bool
+    visibility: np.ndarray
+    search_coverage: np.ndarray
     execution_cost: float
 
     def action(self, t: float, ttl_s: float) -> Action:
@@ -94,6 +92,7 @@ class PrimitiveFactory:
         self.max_shared_targets = int(planning.get("max_shared_targets", 2))
         self.process_noise_m2ps = float(planning.get("prediction_process_noise_m2ps", 0.5))
         self.risk_budget = float(planning.get("visibility_risk", 0.05))
+        self.use_uncertainty = bool(planning.get("use_uncertainty", True))
         self.inter_sample_factor = float(planning.get("inter_sample_motion_factor", 0.5))
         self.fov_margin_deg = float(planning.get("fov_margin_deg", 0.25))
         self.handover_overlap_s = float(planning.get("handover_overlap_s", 0.5))
@@ -110,7 +109,6 @@ class PrimitiveFactory:
             raise ValueError("invalid research execution model")
 
     def predict_tracks(self, context: PolicyContext) -> tuple[PredictedTrack, ...]:
-        H = self.horizon_steps
         result = []
         for track in sorted(context.tracks, key=lambda x: x.track_id):
             p0 = np.asarray(track.position, dtype=float)
@@ -119,7 +117,7 @@ class PrimitiveFactory:
             if p0.shape != (3,) or v.shape != (3,) or covariance.shape != (3, 3):
                 continue
             positions, covariances, speeds = [], [], []
-            for h in range(H):
+            for h in range(self.horizon_steps):
                 tau = (h + 1) * self.slot_s
                 positions.append(p0 + v * tau)
                 covariances.append(covariance + np.eye(3) * self.process_noise_m2ps * tau)
@@ -140,6 +138,8 @@ class PrimitiveFactory:
                 device.zoom_limits[0] - 1e-9 <= zoom <= device.zoom_limits[1] + 1e-9)
 
     def _risk_multiplier(self, n_targets: int) -> float:
+        if not self.use_uncertainty:
+            return 0.0
         checks = max(1, n_targets * self.horizon_steps * 2)
         per_side = max(min(self.risk_budget / checks / 2.0, 0.49), 1e-9)
         return float(min(norm.ppf(1.0 - per_side), 6.0))
@@ -153,7 +153,7 @@ class PrimitiveFactory:
         kappa = self._risk_multiplier(max(len(predicted), 1))
         origin = np.asarray(device.position_m, dtype=float)
         for j, track in enumerate(predicted):
-            for h in range(ready_slot, self.horizon_steps):
+            for h in range(max(0, ready_slot), self.horizon_steps):
                 point = track.positions[h]
                 try:
                     target_yaw, target_pitch = world_to_gimbal_angles(point, device)
@@ -161,7 +161,7 @@ class PrimitiveFactory:
                     continue
                 distance = max(float(np.linalg.norm(point - origin)), 1e-3)
                 covariance = track.covariances[h]
-                sigma_pos = math.sqrt(max(float(np.linalg.eigvalsh(covariance).max()), 0.0))
+                sigma_pos = math.sqrt(max(float(np.linalg.eigvalsh(covariance).max()), 0.0)) if self.use_uncertainty else 0.0
                 sigma_angle = math.degrees(math.atan2(sigma_pos, distance))
                 angular_speed = math.degrees(math.atan2(float(track.speeds[h]), distance))
                 inter = angular_speed * self.slot_s * self.inter_sample_factor
@@ -181,25 +181,38 @@ class PrimitiveFactory:
         except ValueError:
             return matrix
         visible = np.fromiter((p is not None for p in projected), dtype=bool, count=len(search_positions))
-        matrix[:, ready_slot:] = visible[:, None]
+        matrix[:, max(0, ready_slot):] = visible[:, None]
         return matrix
 
     def _make(self, index, device, state, kind, yaw, pitch, zoom, target_ids,
-              predicted, search_positions) -> Primitive | None:
+              predicted, search_positions, ready_override: int | None = None) -> Primitive | None:
         yaw, pitch, zoom = float(yaw), float(pitch), float(zoom)
         if not self._within_limits(device, yaw, pitch, zoom):
             return None
         transition = self._transition_s(state, device, yaw, pitch, zoom)
         ready = int(math.ceil(max(0.0, transition - 1e-12) / self.slot_s))
-        if kind == "hold":
-            # Current stable view is immediately usable; readiness from the mission
-            # still governs the current real/virtual observation outside prediction.
-            transition, ready = 0.0, 0
+        if ready_override is not None:
+            ready = max(0, int(ready_override))
+            transition = ready * self.slot_s
         visibility = self._visibility(device, yaw, pitch, zoom, ready, predicted)
         search = self._search_coverage(device, yaw, pitch, zoom, ready, search_positions)
         cost = transition + 0.02 * abs(zoom - float(state.zoom))
         return Primitive(index, device.id, kind, yaw, pitch, zoom, tuple(target_ids), transition,
                          ready, visibility, search, cost)
+
+    def _hold_ready_slot(self, context: PolicyContext, device_id: str) -> int:
+        readiness = context.research.get("readiness", {}).get(device_id, {})
+        if readiness.get("sensing_valid") is True:
+            return 0
+        reason = readiness.get("reason")
+        stable_since = readiness.get("stable_since")
+        if reason == "settling" and stable_since is not None:
+            remaining = max(0.0, self.settle_s - (context.t - float(stable_since)))
+        else:
+            # A hold command first arrests the virtual movement; the sensor then
+            # needs a complete settling interval before it can be counted.
+            remaining = self.settle_s
+        return int(math.ceil(max(0.0, remaining - 1e-12) / self.slot_s))
 
     def generate(self, context: PolicyContext) -> PrimitiveSet:
         search = context.research.get("search", {})
@@ -214,11 +227,8 @@ class PrimitiveFactory:
             raise ValueError("research search ages do not match positions")
         predicted = self.predict_tracks(context)
         target_ids = tuple(x.track_id for x in predicted)
-        target_index = {key: i for i, key in enumerate(target_ids)}
         by_device: dict[str, list[Primitive]] = {key: [] for key in self.devices}
         serial = 0
-        # Stalest locations are common candidates; every device still gets its own
-        # reachability/FOV evaluation.
         stale_order = np.argsort(-search_ages, kind="stable")[:max(self.max_search_candidates * 2, self.max_search_candidates)]
         for key, device in self.devices.items():
             state = context.devices.get(key)
@@ -233,10 +243,9 @@ class PrimitiveFactory:
                     continue
                 for zoom in _zoom_levels(device, self.search_zooms):
                     candidates.append(("search", yaw, pitch, zoom, tuple()))
-                    break  # broadest configured search zoom is normally sufficient
+                    break
                 if sum(1 for row in candidates if row[0] == "search") >= self.max_search_candidates:
                     break
-            # Single-target candidates.
             for track in predicted:
                 mid = min(self.horizon_steps - 1, max(0, self.horizon_steps // 2))
                 try:
@@ -245,8 +254,6 @@ class PrimitiveFactory:
                     continue
                 for zoom in _zoom_levels(device, self.track_zooms):
                     candidates.append(("track", yaw, pitch, zoom, (track.track_id,)))
-            # Shared-FOV candidates.  Visibility is checked later; candidates that
-            # do not actually fit all targets simply receive no benefit for them.
             for size in range(2, min(self.max_shared_targets, len(predicted)) + 1):
                 for group in combinations(predicted, size):
                     mid = min(self.horizon_steps - 1, max(0, self.horizon_steps // 2))
@@ -258,43 +265,39 @@ class PrimitiveFactory:
                     ids = tuple(item.track_id for item in group)
                     for zoom in _zoom_levels(device, self.track_zooms):
                         candidates.append(("shared_track", yaw, pitch, zoom, ids))
-            # Deduplicate numerically equivalent setpoints while preserving the
-            # first semantic label.  This keeps MILP size stable.
             seen = set()
             for kind, yaw, pitch, zoom, ids in candidates:
                 signature = (round(float(yaw), 5), round(float(pitch), 5), round(float(zoom), 5))
                 if signature in seen:
                     continue
                 seen.add(signature)
+                ready_override = self._hold_ready_slot(context, key) if kind == "hold" else None
                 primitive = self._make(serial, device, state, kind, yaw, pitch, zoom, ids,
-                                       predicted, search_positions)
+                                       predicted, search_positions, ready_override=ready_override)
                 if primitive is not None:
                     by_device[key].append(primitive)
                     serial += 1
         flat = tuple(item for key in self.devices for item in by_device[key])
-        # Build overlap requirements only for an imminent loss under the current
-        # source view.  This avoids demanding two cameras for every tracked target.
         overlap: list[tuple[int, int, float]] = []
-        overlap_slots = max(1, int(math.ceil(self.handover_overlap_s / self.slot_s)))
-        for j, track in enumerate(predicted):
-            sources = tuple(x for x in track.current_devices if x in by_device)
-            if len(sources) != 1:
-                continue
-            source = sources[0]
-            hold = next((p for p in by_device[source] if p.kind == "hold"), None)
-            if hold is None:
-                continue
-            false_slots = np.flatnonzero(~hold.visibility[j])
-            if not len(false_slots):
-                continue
-            first_loss = int(false_slots[0])
-            start = max(0, first_loss - overlap_slots)
-            for h in range(start, first_loss):
-                # Only impose the redundancy slot if at least one non-source
-                # primitive can cover it; otherwise Level-1 loss handles capacity.
-                alternative = any(p.device_id != source and p.visibility[j, h] for p in flat)
-                if alternative and hold.visibility[j, h]:
-                    overlap.append((j, h, 2.0))
+        if self.handover_overlap_s > 0:
+            overlap_slots = max(1, int(math.ceil(self.handover_overlap_s / self.slot_s)))
+            for j, track in enumerate(predicted):
+                sources = tuple(x for x in track.current_devices if x in by_device)
+                if len(sources) != 1:
+                    continue
+                source = sources[0]
+                hold = next((p for p in by_device[source] if p.kind == "hold"), None)
+                if hold is None:
+                    continue
+                false_slots = np.flatnonzero(~hold.visibility[j])
+                if not len(false_slots):
+                    continue
+                first_loss = int(false_slots[0])
+                start = max(0, first_loss - overlap_slots)
+                for h in range(start, first_loss):
+                    alternative = any(p.device_id != source and p.visibility[j, h] for p in flat)
+                    if alternative and hold.visibility[j, h]:
+                        overlap.append((j, h, 2.0))
         return PrimitiveSet({k: tuple(v) for k, v in by_device.items()}, flat, target_ids,
                             search_positions, search_ages, self.horizon_steps, self.slot_s,
                             tuple(overlap))
@@ -328,9 +331,7 @@ class HorizonMILP:
                                   self.C + self.J * self.H + self.G * self.H)
         self._candidate_index = {p.index: i for i, p in enumerate(primitive_set.flat)}
         self._base_A, self._base_lb, self._base_ub = self._base_constraints()
-        lb = np.zeros(self.layout.nvar)
-        ub = np.ones(self.layout.nvar)
-        self.bounds = Bounds(lb, ub)
+        self.bounds = Bounds(np.zeros(self.layout.nvar), np.ones(self.layout.nvar))
         self.integrality = np.zeros(self.layout.nvar, dtype=int)
         self.integrality[:self.C] = 1
 
@@ -341,14 +342,12 @@ class HorizonMILP:
         lb: list[float] = []
         ub: list[float] = []
         row = 0
-        # Exactly one primitive for every available device that has candidates.
         for _, candidates in self.ps.by_device.items():
             if not candidates:
                 continue
             for p in candidates:
                 rows.append(row); cols.append(self._candidate_index[p.index]); data.append(1.0)
             lb.append(1.0); ub.append(1.0); row += 1
-        # Continuous visibility constraints with a [0,1] loss slack per target/slot.
         for j in range(self.J):
             for h in range(self.H):
                 for p in self.ps.flat:
@@ -357,9 +356,6 @@ class HorizonMILP:
                 s = self.layout.s0 + j * self.H + h
                 rows.append(row); cols.append(s); data.append(1.0)
                 lb.append(1.0); ub.append(np.inf); row += 1
-        # Search y_{g,h} can become one only when at least one selected primitive
-        # covers the grid point. y is continuous; with binary x and maximization its
-        # relaxation is exact for this OR relation.
         for g in range(self.G):
             for h in range(self.H):
                 for p in self.ps.flat:
@@ -368,8 +364,6 @@ class HorizonMILP:
                 y = self.layout.y0 + g * self.H + h
                 rows.append(row); cols.append(y); data.append(-1.0)
                 lb.append(0.0); ub.append(np.inf); row += 1
-        # Hard overlap requirements are added only where PrimitiveFactory has
-        # already verified an alternative exists.
         for j, h, required in self.ps.overlap_requirements:
             for p in self.ps.flat:
                 if p.visibility[j, h]:
@@ -392,9 +386,7 @@ class HorizonMILP:
         if not extra_rows:
             return LinearConstraint(self._base_A, self._base_lb, self._base_ub)
         from scipy.sparse import vstack, csr_matrix
-        mats = [self._base_A]
-        lbs = [self._base_lb]
-        ubs = [self._base_ub]
+        mats = [self._base_A]; lbs = [self._base_lb]; ubs = [self._base_ub]
         for vector, lower, upper in extra_rows:
             mats.append(csr_matrix(vector.reshape(1, -1)))
             lbs.append(np.asarray([lower], dtype=float)); ubs.append(np.asarray([upper], dtype=float))
@@ -403,13 +395,13 @@ class HorizonMILP:
     def _solve(self, objective: np.ndarray, extra=None):
         return milp(objective, integrality=self.integrality, bounds=self.bounds,
                     constraints=self._constraints_with(extra),
-                    options={"time_limit": self.time_limit_s, "mip_rel_gap": self.mip_rel_gap,
-                             "presolve": True})
+                    options={"time_limit": self.time_limit_s, "mip_rel_gap": self.mip_rel_gap, "presolve": True})
 
     @staticmethod
     def _status(result) -> tuple[str, bool]:
         table = {0: "optimal", 1: "limit", 2: "infeasible", 3: "unbounded", 4: "error"}
-        return table.get(int(getattr(result, "status", 4)), "error"), int(getattr(result, "status", 4)) == 1
+        code = int(getattr(result, "status", 4))
+        return table.get(code, "error"), code == 1
 
     def selected(self, x: np.ndarray | None) -> tuple[Primitive, ...]:
         if x is None:
@@ -428,8 +420,6 @@ class HorizonMILP:
             return (), diag
         j1 = float(c1 @ r1.x)
         diag.level1 = j1
-        # Level 2: maximize normalized age-weighted persistent search while locking
-        # the best Level-1 value reached by the solver.
         weights = self._search_weights()
         c2 = np.zeros(self.layout.nvar)
         if len(weights):
@@ -437,14 +427,12 @@ class HorizonMILP:
         lock1 = (c1.copy(), -np.inf, j1 + 1e-7)
         r2 = self._solve(c2, [lock1])
         if r2.x is None:
-            # A time-limited Level-1 incumbent is still a valid safe fallback.
             diag.status, diag.timeout = status1, limit1
             diag.solve_ms = (time.perf_counter() - start) * 1000
             diag.mip_gap = getattr(r1, "mip_gap", None)
             return self.selected(r1.x), diag
         j2 = float(-c2 @ r2.x)
         diag.level2 = j2
-        # Level 3: choose the least expensive motion among Level-1/2 equivalent solutions.
         c3 = np.zeros(self.layout.nvar)
         for i, p in enumerate(self.ps.flat):
             c3[i] = p.execution_cost
@@ -452,9 +440,9 @@ class HorizonMILP:
         r3 = self._solve(c3, [lock1, lock2])
         result = r3 if r3.x is not None else r2
         diag.level3 = float(c3 @ result.x) if result.x is not None else None
-        statuses = [self._status(r)[0] for r in (r1, r2, r3) if r is not None]
+        statuses = [self._status(r)[0] for r in (r1, r2, r3)]
         diag.status = "/".join(statuses)
-        diag.timeout = any(self._status(r)[1] for r in (r1, r2, r3) if r is not None)
+        diag.timeout = any(self._status(r)[1] for r in (r1, r2, r3))
         diag.mip_gap = getattr(result, "mip_gap", None)
         diag.solve_ms = (time.perf_counter() - start) * 1000
         diag.extras = {"overlap_constraints": len(self.ps.overlap_requirements),
@@ -465,14 +453,14 @@ class HorizonMILP:
                        method="weighted_rh") -> tuple[tuple[Primitive, ...], SolverDiagnostics]:
         start = time.perf_counter()
         c = np.zeros(self.layout.nvar)
-        # Normalize loss to a fraction of target-time so weight tuning is meaningful.
         if self.layout.ns:
             c[self.layout.s0:self.layout.s0 + self.layout.ns] = float(loss_weight) / max(self.layout.ns, 1)
         weights = self._search_weights()
         if len(weights):
             c[self.layout.y0:self.layout.y0 + self.layout.ny] = -float(search_weight) * weights / max(len(weights), 1)
+        horizon = max(self.horizon_s_equivalent(), 1e-9)
         for i, p in enumerate(self.ps.flat):
-            c[i] += float(motion_weight) * p.execution_cost / max(self.horizon_s_equivalent(), 1e-9)
+            c[i] += float(motion_weight) * p.execution_cost / horizon
         result = self._solve(c)
         status, limit = self._status(result)
         diag = SolverDiagnostics(method=method, status=status, timeout=limit,
