@@ -6,6 +6,7 @@ from typing import Any
 from ..recording import dumps
 from .evaluation import ResearchEvaluator
 from .perception import VirtualPerception
+from .provenance import write_research_provenance
 from .search_map import PersistentSearchMap, ReadinessTracker
 from .target_field import VirtualTargetField
 
@@ -36,6 +37,7 @@ class SearchMonitorMission:
         self.perception = VirtualPerception(cfg)
         self.evaluator = ResearchEvaluator()
         self._last_t: float | None = None
+        self._provenance_written = False
         self.last_truth = {}
         self.last_perception = None
         self.last_search = None
@@ -52,6 +54,7 @@ class SearchMonitorMission:
         self.perception.reset()
         self.evaluator.reset()
         self._last_t = None
+        self._provenance_written = False
         self.last_truth = {}
         self.last_perception = None
         self.last_search = None
@@ -79,8 +82,6 @@ class SearchMonitorMission:
                                   "stable_since": item.stable_since,
                                   "reason": item.reason}
                           for key, item in readiness.items()},
-            # Public experiment model: policies may know the configured actuator
-            # and task limits, just as they know camera calibration and ROI.
             "execution": dict(self.cfg.policy.get("research", {}).get("execution", {})),
             "planning": dict(self.cfg.policy.get("research", {}).get("planning", {})),
         }
@@ -98,6 +99,19 @@ class SearchMonitorMission:
             truth_positions={key: item.position for key, item in truth.items()},
         )
 
+    def _ensure_provenance(self, recorder) -> None:
+        if self._provenance_written:
+            return
+        raw = getattr(recorder, "recorder", recorder)
+        path = getattr(raw, "path", None)
+        if path is None:
+            return
+        write_research_provenance(path, cfg=self.cfg, extra={
+            "environment": str(getattr(raw, "mode", "unknown")),
+            "source": "research_mission",
+        })
+        self._provenance_written = True
+
     def record(self, recorder, t: float) -> None:
         """Write evaluation-only research tables. Safe to call once per cycle.
 
@@ -107,6 +121,7 @@ class SearchMonitorMission:
         """
         if recorder is None or self.last_perception is None or self.last_search is None:
             return
+        self._ensure_provenance(recorder)
         for status in self.last_perception.target_status:
             monitor = self.evaluator.target_snapshot(status.truth_id)
             recorder.write(
