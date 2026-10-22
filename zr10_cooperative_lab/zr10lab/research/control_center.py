@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import copy
 from dataclasses import replace
-import math
 import time
 
 from ..control_center import ControlCenter, _PolicyWorker, _SessionRecorder
-from ..models import Action, CommandResult
+from ..models import CommandResult
 from ..recording import CSVRecorder, jsonable
 from ..simulation import SimulationWorld
 from .mission import SearchMonitorMission
@@ -18,9 +18,22 @@ class ResearchControlCenter(ControlCenter):
     """Control-center backend for the virtual search/monitor mission.
 
     `mirror` keeps the virtual world authoritative and sends exactly the same
-    A/E/Zoom actions to the physical HardwareFleet.  Real RTSP/detections never
+    A/E/Zoom actions to the physical HardwareFleet. Real RTSP/detections never
     enter the paper task loop in this mode.
+
+    The stock browser UI only knows ``sim`` and ``hardware``.  A mirror session is
+    therefore *locked* when this backend is constructed with
+    ``environment='mirror', armed=True``.  The browser continues to display the
+    virtual/simulation task world; any subsequent UI ``sim`` start is mapped back
+    to the already armed mirror backend.  This avoids invasive edits to the stable
+    UI and, more importantly, prevents a page click from silently arming hardware.
     """
+
+    def __init__(self, cfg, *, environment="sim", armed=False, output=None):
+        if environment == "mirror" and armed is not True:
+            raise ValueError("mirror 会驱动真实 ZR10，启动研究控制中心时必须显式 --arm")
+        self._mirror_locked = environment == "mirror"
+        super().__init__(cfg, environment=environment, armed=armed, output=output)
 
     @staticmethod
     def _environment(value):
@@ -28,17 +41,36 @@ class ResearchControlCenter(ControlCenter):
             raise ValueError("environment 只能为 sim / mirror / hardware")
         return value
 
+    def snapshot(self):
+        snap = super().snapshot()
+        if self._mirror_locked:
+            # The browser intentionally sees the virtual task environment.  The
+            # additional explicit flags remain available to diagnostics/tests.
+            snap["research_environment"] = "mirror"
+            snap["mirror_hardware"] = True
+            snap["environment"] = "sim"
+            snap["armed"] = True
+        return snap
+
     async def _operation(self, action, payload):
+        if action == "start" and self._mirror_locked:
+            request = copy.deepcopy(payload)
+            requested = request.get("environment", "sim") or "sim"
+            if requested not in ("sim", "mirror"):
+                raise ValueError("mirror 研究控制中心不能切换到真实视频 hardware 任务；请另启标准控制中心")
+            # Only a process that was itself launched with mirror+--arm can reach
+            # this path.  The browser can neither create nor revoke that authority.
+            request["environment"] = "mirror"
+            request["armed"] = True
+            return await super()._operation(action, request)
         if action == "start":
-            requested_environment = self._environment(payload.get("environment", self.environment))
+            requested_environment = self._environment(payload.get("environment", self.environment) or self.environment)
             requested_armed = payload.get("armed", self.armed)
             if requested_environment == "mirror" and requested_armed is not True:
                 raise ValueError("mirror 会驱动真实 ZR10，必须明确启用 armed")
         return await super()._operation(action, payload)
 
     async def _update_vision(self):
-        # Mirror mode intentionally ignores real RTSP/YOLO.  Pure hardware mode
-        # retains the original platform semantics.
         if self.environment == "mirror":
             if self._vision is not None:
                 vision, self._vision = self._vision, None
@@ -59,13 +91,11 @@ class ResearchControlCenter(ControlCenter):
             raise ValueError("mirror 实机镜像尚未 armed")
 
     async def _run_session(self):
-        # Preserve the legacy path verbatim for a non-research true-hardware run.
         if self.environment == "hardware" or not SearchMonitorMission.enabled(self.cfg):
             return await super()._run_session()
 
         recorder = gate = worker = None
         completed = False
-        mission = None
         try:
             from ..control_modes import create_mode_policy
             self._world = SimulationWorld(self.cfg)
@@ -84,8 +114,6 @@ class ResearchControlCenter(ControlCenter):
                 self._fleet = HardwareFleet(self.cfg, event_sink=self._event,
                                             result_sink=self._result, telemetry_sink=self._telemetry)
                 await self._fleet.start()
-                # Mirror feedback is diagnostic only.  Virtual device state remains
-                # authoritative even if a physical unit is disconnected.
             self._states = self._current_states()
             if self.status == "starting":
                 self.status = "running"
@@ -142,7 +170,6 @@ class ResearchControlCenter(ControlCenter):
                 self._remember_tracks()
                 self._targets.update(actions)
 
-                # Virtual execution is always advanced, including mirror mode.
                 self._world.advance(actions, self._dt)
                 if self._fleet is not None:
                     self._fleet.submit(actions)
@@ -194,11 +221,9 @@ class ResearchControlCenter(ControlCenter):
     def frame(self, device_id):
         if self.environment != "mirror":
             return super().frame(device_id)
-        snap = self.snapshot()
+        snap = super().snapshot()  # internal snapshot retains the true mirror label
         if not snap["video_enabled"] or device_id not in {d["id"] for d in snap["devices"] if d["enabled"]}:
             return None
-        # Keep mirror preview explicitly synthetic.  Users must never confuse it
-        # with real RTSP imagery merely because physical ZR10 units are connected.
         import cv2
         import numpy as np
         image = np.full((360, 640, 3), (35, 26, 20), dtype=np.uint8)
