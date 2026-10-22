@@ -59,10 +59,16 @@ def test_runner_separates_10hz_execution_from_half_second_replanning():
     for t in (0.0, 0.1, 0.4):
         experiment.process_research(t, 0.1, world.states(), _step())
     assert policy.calls == 1
+    assert experiment.latest["metrics"]["research_initial_replan_count"] == 1
+    assert experiment.latest["metrics"]["research_periodic_replan_count"] == 0
 
     # The nominal half-second planning boundary produces the second call.
     experiment.process_research(0.5, 0.1, world.states(), _step())
     assert policy.calls == 2
+    metrics = experiment.latest["metrics"]
+    assert metrics["research_replan_count"] == 2
+    assert metrics["research_periodic_replan_count"] == 1
+    assert metrics["research_event_replan_count"] == 0
 
 
 def test_new_anonymous_track_triggers_off_cycle_replan():
@@ -86,3 +92,6 @@ def test_new_anonymous_track_triggers_off_cycle_replan():
     )
     experiment.process_research(0.2, 0.1, world.states(), _step((track,)))
     assert policy.calls == 2
+    metrics = experiment.latest["metrics"]
+    assert metrics["research_event_replan_count"] == 1
+    assert metrics["research_periodic_replan_count"] == 0
