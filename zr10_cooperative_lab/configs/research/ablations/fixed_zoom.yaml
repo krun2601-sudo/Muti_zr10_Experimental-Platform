@@ -1,0 +1,7 @@
+extends: ../scenarios/S6_contention.yaml
+policy:
+  research:
+    scenario: {id: A3-fixed-zoom}
+    planning:
+      search_zoom_levels: [5.0]
+      tracking_zoom_levels: [5.0]
