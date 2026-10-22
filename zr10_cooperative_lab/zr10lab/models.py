@@ -125,6 +125,10 @@ class PolicyContext:
     rays: tuple[Ray, ...] = ()
     tracks: tuple[Track, ...] = ()
     metrics: dict[str, float] = field(default_factory=dict)
+    # Optional task-specific public state.  The persistent-search research mission
+    # stores freshness/readiness/planning parameters here.  Simulation truth and
+    # private truth-to-track associations are explicitly forbidden.
+    research: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
