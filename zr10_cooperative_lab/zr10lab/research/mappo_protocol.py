@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import copy
-import csv
 import json
 from pathlib import Path
 from typing import Iterable
@@ -15,6 +14,15 @@ from .mappo import MAPPOTrainConfig, SharedActorCritic, _gae, _torch
 from .provenance import runtime_provenance
 from .rl_env import ResearchMARLEnv
 from .runner import run_research_simulation
+
+
+SELECTION_METRICS = (
+    "research_missed_target_rate",
+    "research_detection_delay_censored_p95_s",
+    "research_total_loss_s",
+    "research_max_loss_gap_s",
+    "research_revisit_age_p95_s",
+)
 
 
 class MultiScenarioResearchEnv:
@@ -77,7 +85,7 @@ def train_mappo_protocol(train_configs: Iterable[str | Path], output_dir: str | 
     """Train MAPPO only on an explicit frozen training scenario list.
 
     Scenarios rotate at episode boundaries. Periodic checkpoints are intended for
-    *validation-only* selection; the held-out test split must never be passed here.
+    validation-only selection; the held-out test split must never be passed here.
     """
     torch, _ = _torch()
     cfg_paths = [Path(p).resolve() for p in train_configs]
@@ -155,18 +163,15 @@ def train_mappo_protocol(train_configs: Iterable[str | Path], output_dir: str | 
 
 
 def _score(metrics):
-    # Validation selection follows task priority, not a hidden weighted reward:
-    # loss -> max gap -> revisit P95 -> detection delay. None is worst.
     def value(key):
         v=metrics.get(key)
         return float(v) if isinstance(v,(int,float)) and np.isfinite(v) else float("inf")
-    return (value("research_total_loss_s"), value("research_max_loss_gap_s"),
-            value("research_revisit_age_p95_s"), value("research_detection_delay_p95_s"))
+    return tuple(value(key) for key in SELECTION_METRICS)
 
 
 def select_checkpoint(checkpoints, validation_configs, seeds, output_dir,
                       *, safe=False, device="cpu"):
-    """Select checkpoint on validation scenarios only using lexicographic task metrics."""
+    """Select checkpoint on validation scenarios only using discovery-safe lexicographic metrics."""
     rows=[]; aggregate=[]
     for checkpoint in checkpoints:
         per=[]
@@ -181,8 +186,7 @@ def select_checkpoint(checkpoints, validation_configs, seeds, output_dir,
                 metrics=_last_cycle_metrics(Path(run_dir)); per.append(metrics)
                 rows.append({"checkpoint":str(checkpoint),"config":str(config_path),"seed":int(seed),**metrics})
         summary={"checkpoint":str(checkpoint),"n":len(per)}
-        for metric in ("research_total_loss_s","research_max_loss_gap_s",
-                       "research_revisit_age_p95_s","research_detection_delay_p95_s"):
+        for metric in SELECTION_METRICS:
             values=[float(x[metric]) for x in per if isinstance(x.get(metric),(int,float)) and np.isfinite(x[metric])]
             summary[metric]=float(np.mean(values)) if values else None
         aggregate.append(summary)
@@ -192,7 +196,11 @@ def select_checkpoint(checkpoints, validation_configs, seeds, output_dir,
     _write_table(out/"validation_checkpoint_runs.csv",rows)
     _write_table(out/"validation_checkpoint_summary.csv",aggregate)
     (out/"selected_checkpoint.json").write_text(json.dumps({
-        "selection_rule":"lexicographic validation metrics: total loss, max gap, revisit P95, detection delay P95",
+        "selection_rule":(
+            "lexicographic validation means: missed-target rate, censored detection-delay P95, "
+            "post-discovery total loss, maximum loss gap, revisit-age P95"
+        ),
+        "selection_metrics":list(SELECTION_METRICS),
         "safe":bool(safe),"validation_configs":[str(Path(x).resolve()) for x in validation_configs],
         "validation_seeds":[int(x) for x in seeds],"selected":chosen,
     },ensure_ascii=False,indent=2),encoding="utf-8")
