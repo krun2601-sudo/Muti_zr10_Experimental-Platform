@@ -31,7 +31,7 @@ class PriorityHorizonMILP:
     ---------
     x_c : candidate primitive selection, binary.
     s_jh: target visibility shortfall in [0,1].
-    q_r : overlap requirement satisfaction in [0,1].  A requirement for two
+    q_r : overlap requirement satisfaction in [0,1]. A requirement for two
           simultaneous views is encoded as views >= 2*q_r. Thus a physically
           impossible overlap cannot make the whole problem infeasible; it becomes
           an explicit, measurable shortfall.
@@ -42,6 +42,12 @@ class PriorityHorizonMILP:
       2) maximum handover-overlap satisfaction,
       3) maximum persistent-search freshness utility,
       4) minimum execution cost.
+
+    ``time_limit_s`` is one total wall-clock MILP budget for a replanning call,
+    not a fresh budget for each lexicographic level. If a higher-priority level is
+    not certified optimal before the budget expires, lower levels are not optimized
+    under an uncertified incumbent lock. Diagnostics explicitly distinguish a
+    feasible incumbent from a certified lexicographic optimum.
 
     The weighted-RH baseline uses exactly the same variables and constraints but a
     finite weighted sum, so differences are attributable to priority structure
@@ -78,7 +84,6 @@ class PriorityHorizonMILP:
         ub: list[float] = []
         row = 0
 
-        # Exactly one primitive per available device.
         for candidates in self.ps.by_device.values():
             if not candidates:
                 continue
@@ -86,7 +91,6 @@ class PriorityHorizonMILP:
                 rows.append(row); cols.append(self._candidate_index[p.index]); data.append(1.0)
             lb.append(1.0); ub.append(1.0); row += 1
 
-        # At least one view per discovered target/time slot, with explicit shortfall.
         for j in range(self.J):
             for h in range(self.H):
                 for p in self.ps.flat:
@@ -96,8 +100,6 @@ class PriorityHorizonMILP:
                 rows.append(row); cols.append(s); data.append(1.0)
                 lb.append(1.0); ub.append(np.inf); row += 1
 
-        # Search indicator can become one only if at least one selected primitive
-        # covers the cell in this future slot.
         for g in range(self.G):
             for h in range(self.H):
                 for p in self.ps.flat:
@@ -107,9 +109,6 @@ class PriorityHorizonMILP:
                 rows.append(row); cols.append(y); data.append(-1.0)
                 lb.append(0.0); ub.append(np.inf); row += 1
 
-        # Soft overlap: views >= required*q. q=1 means the requested overlap is
-        # fully realized; q<1 quantifies capacity/geometry shortfall without
-        # destroying feasibility of the main monitoring problem.
         for r, (j, h, required) in enumerate(self.ps.overlap_requirements):
             for p in self.ps.flat:
                 if p.visibility[j, h]:
@@ -141,13 +140,14 @@ class PriorityHorizonMILP:
             ubs.append(np.asarray([upper], dtype=float))
         return LinearConstraint(vstack(mats).tocsr(), np.concatenate(lbs), np.concatenate(ubs))
 
-    def _solve(self, objective: np.ndarray, extra=None):
+    def _solve(self, objective: np.ndarray, extra=None, *, time_limit_s: float | None = None):
+        limit = self.time_limit_s if time_limit_s is None else max(float(time_limit_s), 1e-3)
         return milp(
             objective,
             integrality=self.integrality,
             bounds=self.bounds,
             constraints=self._constraints_with(extra),
-            options={"time_limit": self.time_limit_s,
+            options={"time_limit": limit,
                      "mip_rel_gap": self.mip_rel_gap,
                      "presolve": True},
         )
@@ -157,6 +157,10 @@ class PriorityHorizonMILP:
         table = {0: "optimal", 1: "limit", 2: "infeasible", 3: "unbounded", 4: "error"}
         code = int(getattr(result, "status", 4))
         return table.get(code, "error"), code == 1
+
+    @staticmethod
+    def _optimal(result) -> bool:
+        return int(getattr(result, "status", 4)) == 0 and getattr(result, "x", None) is not None
 
     def selected(self, x: np.ndarray | None) -> tuple[Primitive, ...]:
         if x is None:
@@ -196,7 +200,6 @@ class PriorityHorizonMILP:
         diag.overlap_shortfall = overlap_shortfall
         diag.search_utility = self._search_utility(x, weights)
         diag.execution_cost = self._execution_cost(x)
-        # Keep stable CSV meanings for existing analysis scripts.
         diag.level2 = diag.search_utility
         diag.level3 = diag.execution_cost
         diag.extras.update({
@@ -205,74 +208,111 @@ class PriorityHorizonMILP:
             "overlap_satisfaction_fraction": overlap_fraction,
             "horizon_steps": self.H,
             "slot_s": self.ps.slot_s,
+            "total_solver_budget_s": self.time_limit_s,
         })
 
     def solve_lexicographic(self, method="ecprh") -> tuple[tuple[Primitive, ...], SolverDiagnostics]:
         start = time.perf_counter()
+        deadline = start + self.time_limit_s
         diag = SolverDiagnostics(method=method, candidate_count=self.C)
         weights = self._search_weights()
+        executed = []
+        certification = {
+            "visibility_level_certified": False,
+            "overlap_level_certified": self.Q == 0,
+            "search_level_certified": not len(weights),
+            "execution_level_certified": False,
+            "priority_certified": False,
+        }
 
-        # L1: minimum visibility loss.
+        def remaining() -> float:
+            return max(0.0, deadline - time.perf_counter())
+
+        def finish(result, *, budget_exhausted=False):
+            diag.status = "/".join(self._status(r)[0] for r in executed)
+            if budget_exhausted:
+                diag.status = (diag.status + "/budget_exhausted").lstrip("/")
+            diag.timeout = budget_exhausted or any(self._status(r)[1] for r in executed)
+            diag.mip_gap = getattr(result, "mip_gap", None) if result is not None else None
+            diag.solve_ms = (time.perf_counter() - start) * 1000.0
+            if result is not None and result.x is not None:
+                self._fill_diag(diag, result.x, weights)
+            diag.extras.update(certification)
+            diag.extras["levels_executed"] = len(executed)
+            return self.selected(result.x if result is not None else None), diag
+
         c1 = np.zeros(self.layout.nvar)
         c1[self.layout.s0:self.layout.s0 + self.layout.ns] = self.ps.slot_s
-        r1 = self._solve(c1)
+        r1 = self._solve(c1, time_limit_s=remaining())
+        executed.append(r1)
         if r1.x is None:
-            status, limit = self._status(r1)
-            diag.status, diag.timeout = status, limit
-            diag.solve_ms = (time.perf_counter() - start) * 1000.0
-            return (), diag
+            return finish(r1)
+        certification["visibility_level_certified"] = self._optimal(r1)
+        if not certification["visibility_level_certified"]:
+            # The incumbent is usable, but lower priorities must not be optimized
+            # under a lock that has not been proven to be the level-1 optimum.
+            return finish(r1)
         j1 = float(c1 @ r1.x)
         lock1 = (c1.copy(), -np.inf, j1 + 1e-7)
+        current = r1
 
-        # L1b: maximize requested handover overlap, but never at the expense of L1.
-        c_overlap = np.zeros(self.layout.nvar)
-        if self.Q:
-            c_overlap[self.layout.q0:self.layout.q0 + self.layout.nq] = -1.0
-            r_overlap = self._solve(c_overlap, [lock1])
-        else:
-            r_overlap = r1
-        if r_overlap.x is None:
-            r_overlap = r1
-        q_best = (float(np.sum(r_overlap.x[self.layout.q0:self.layout.q0 + self.layout.nq]))
-                  if self.Q else 0.0)
         lock_overlap = None
         if self.Q:
+            if remaining() <= 1e-3:
+                return finish(current, budget_exhausted=True)
+            c_overlap = np.zeros(self.layout.nvar)
+            c_overlap[self.layout.q0:self.layout.q0 + self.layout.nq] = -1.0
+            r_overlap = self._solve(c_overlap, [lock1], time_limit_s=remaining())
+            executed.append(r_overlap)
+            if r_overlap.x is not None:
+                current = r_overlap
+            certification["overlap_level_certified"] = self._optimal(r_overlap)
+            if not certification["overlap_level_certified"]:
+                return finish(current)
+            q_best = float(np.sum(r_overlap.x[self.layout.q0:self.layout.q0 + self.layout.nq]))
             q_vector = np.zeros(self.layout.nvar)
             q_vector[self.layout.q0:self.layout.q0 + self.layout.nq] = 1.0
             lock_overlap = (q_vector, q_best - 1e-7, np.inf)
 
-        # L2: persistent-search freshness utility under the monitoring+handover optimum.
-        c2 = np.zeros(self.layout.nvar)
         if len(weights):
+            if remaining() <= 1e-3:
+                return finish(current, budget_exhausted=True)
+            c2 = np.zeros(self.layout.nvar)
             c2[self.layout.y0:self.layout.y0 + self.layout.ny] = -weights
-        extra2 = [lock1] + ([lock_overlap] if lock_overlap is not None else [])
-        r2 = self._solve(c2, extra2)
-        if r2.x is None:
-            r2 = r_overlap
-        search_best = self._search_utility(r2.x, weights) or 0.0
-        lock_search = None
-        if len(weights):
+            extra2 = [lock1] + ([lock_overlap] if lock_overlap is not None else [])
+            r2 = self._solve(c2, extra2, time_limit_s=remaining())
+            executed.append(r2)
+            if r2.x is not None:
+                current = r2
+            certification["search_level_certified"] = self._optimal(r2)
+            if not certification["search_level_certified"]:
+                return finish(current)
+            search_best = self._search_utility(r2.x, weights) or 0.0
             search_vector = np.zeros(self.layout.nvar)
             search_vector[self.layout.y0:self.layout.y0 + self.layout.ny] = weights
             lock_search = (search_vector, search_best - 1e-7, np.inf)
+        else:
+            extra2 = [lock1] + ([lock_overlap] if lock_overlap is not None else [])
+            lock_search = None
 
-        # L3: minimum execution cost while preserving all previous levels.
+        if remaining() <= 1e-3:
+            return finish(current, budget_exhausted=True)
         c3 = np.zeros(self.layout.nvar)
         for i, p in enumerate(self.ps.flat):
             c3[i] = p.execution_cost
         extra3 = list(extra2) + ([lock_search] if lock_search is not None else [])
-        r3 = self._solve(c3, extra3)
-        result = r3 if r3.x is not None else r2
-
-        results = [r1]
-        if self.Q: results.append(r_overlap)
-        results.extend([r2, r3])
-        diag.status = "/".join(self._status(r)[0] for r in results)
-        diag.timeout = any(self._status(r)[1] for r in results)
-        diag.mip_gap = getattr(result, "mip_gap", None)
-        diag.solve_ms = (time.perf_counter() - start) * 1000.0
-        self._fill_diag(diag, result.x, weights)
-        return self.selected(result.x), diag
+        r3 = self._solve(c3, extra3, time_limit_s=remaining())
+        executed.append(r3)
+        if r3.x is not None:
+            current = r3
+        certification["execution_level_certified"] = self._optimal(r3)
+        certification["priority_certified"] = all([
+            certification["visibility_level_certified"],
+            certification["overlap_level_certified"],
+            certification["search_level_certified"],
+            certification["execution_level_certified"],
+        ])
+        return finish(current)
 
     def solve_weighted(self, loss_weight=10.0, overlap_weight=3.0,
                        search_weight=1.0, motion_weight=0.1,
@@ -289,7 +329,7 @@ class PriorityHorizonMILP:
         horizon = max(self.ps.horizon_steps * self.ps.slot_s, 1e-9)
         for i, p in enumerate(self.ps.flat):
             c[i] += float(motion_weight) * p.execution_cost / horizon
-        result = self._solve(c)
+        result = self._solve(c, time_limit_s=self.time_limit_s)
         status, limit = self._status(result)
         diag = SolverDiagnostics(method=method, status=status, timeout=limit,
                                  solve_ms=(time.perf_counter() - start) * 1000.0,
@@ -300,4 +340,5 @@ class PriorityHorizonMILP:
             "loss": float(loss_weight), "overlap": float(overlap_weight),
             "search": float(search_weight), "motion": float(motion_weight),
         }
+        diag.extras["weighted_objective_certified"] = self._optimal(result)
         return self.selected(result.x), diag
