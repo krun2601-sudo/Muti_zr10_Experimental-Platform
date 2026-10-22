@@ -9,6 +9,7 @@ import numpy as np
 @dataclass
 class _TargetEval:
     first_active_t: float
+    last_active_t: float
     discovery_t: float | None = None
     monitor_time_s: float = 0.0
     visible_time_s: float = 0.0
@@ -29,6 +30,13 @@ class ResearchEvaluator:
     stochastic detector happened to fire on that frame. Detection/coasting remains
     available in tracks.csv, while the loss quantities here correspond exactly to
     the paper's continuous-monitoring requirement.
+
+    Discovery and post-discovery monitoring are deliberately reported separately.
+    In particular, an undiscovered target must never obtain an apparently perfect
+    monitoring score merely because the monitoring obligation was never activated.
+    ``research_missed_target_rate`` captures this failure explicitly, and the
+    censored detection-delay metrics assign an undiscovered target its observed
+    in-ROI exposure time as a conservative lower bound on detection delay.
 
     The evaluator can also receive one-step *anonymous* safety predictions from a
     planner. At the due time it resolves anonymous track IDs only inside this
@@ -89,9 +97,10 @@ class ResearchEvaluator:
             active_ids.add(status.truth_id)
             state = self.targets.get(status.truth_id)
             if state is None:
-                state = _TargetEval(float(t))
+                state = _TargetEval(float(t), float(t))
                 self.targets[status.truth_id] = state
                 self.entered_ids.add(status.truth_id)
+            state.last_active_t = float(t)
             if state.discovery_t is None and status.discovered and status.discovery_t is not None:
                 state.discovery_t = float(status.discovery_t)
                 self.discovery_delays.append(max(0.0, state.discovery_t - state.first_active_t))
@@ -191,7 +200,9 @@ class ResearchEvaluator:
         return events
 
     def metrics(self, active_ids: set[str] | None = None) -> dict[str, float | int | None]:
-        discovered = [s for s in self.targets.values() if s.discovery_t is not None]
+        all_targets = list(self.targets.values())
+        discovered = [s for s in all_targets if s.discovery_t is not None]
+        missed = [s for s in all_targets if s.discovery_t is None]
         monitor_time = sum(s.monitor_time_s for s in discovered)
         visible_time = sum(s.visible_time_s for s in discovered)
         total_loss = sum(s.total_loss_s for s in discovered)
@@ -200,12 +211,21 @@ class ResearchEvaluator:
         handover_total = self.handover_success + self.handover_without_overlap
         risk_rate = (self.risk_prediction_violations / self.risk_prediction_trials
                      if self.risk_prediction_trials else None)
+        censored_delays = [
+            max(0.0, (s.discovery_t if s.discovery_t is not None else s.last_active_t) - s.first_active_t)
+            for s in all_targets
+        ]
+        entered = len(all_targets)
         return {
-            "research_entered_target_count": len(self.entered_ids),
+            "research_entered_target_count": entered,
             "research_discovered_target_count": len(discovered),
-            "research_discovery_rate": len(discovered) / max(len(self.entered_ids), 1),
+            "research_missed_target_count": len(missed),
+            "research_missed_target_rate": len(missed) / entered if entered else 0.0,
+            "research_discovery_rate": len(discovered) / entered if entered else 1.0,
             "research_detection_delay_mean_s": float(np.mean(self.discovery_delays)) if self.discovery_delays else None,
             "research_detection_delay_p95_s": float(np.percentile(self.discovery_delays, 95)) if self.discovery_delays else None,
+            "research_detection_delay_censored_mean_s": float(np.mean(censored_delays)) if censored_delays else 0.0,
+            "research_detection_delay_censored_p95_s": float(np.percentile(censored_delays, 95)) if censored_delays else 0.0,
             "research_monitor_visible_ratio": visible_time / max(monitor_time, 1e-12) if discovered else None,
             "research_total_loss_s": float(total_loss),
             "research_max_loss_gap_s": float(max_loss),
