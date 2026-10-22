@@ -8,7 +8,7 @@ import time
 from ..recording import CSVRecorder
 from ..simulation import SimulationWorld
 from .mission import SearchMonitorMission
-from .policies import build_research_policy
+from .paper_policies import build_paper_policy
 from .provenance import write_research_provenance
 from .runtime import ResearchExperiment
 
@@ -28,19 +28,10 @@ def _policy(method: str, cfg):
     # ResearchExperiment is the single authoritative cadence controller for every
     # method. Keeping cadence outside policies guarantees identical periodic/event
     # decision opportunities in GUI, batch and headless execution.
-    if method == "ecprh":
-        from .priority_policies import PriorityECPRHPolicy
-        return PriorityECPRHPolicy(cfg)
-    if method == "weighted_rh":
-        from .priority_policies import PriorityWeightedRHPolicy
-        return PriorityWeightedRHPolicy(cfg)
-    if method == "greedy":
-        from .strong_baselines import ExecutionAwareMyopicGreedyPolicy
-        return ExecutionAwareMyopicGreedyPolicy(cfg)
     if method in ("mappo", "safe_mappo"):
         from .mappo import MAPPOPolicy, SafeMAPPOPolicy
         return MAPPOPolicy(cfg) if method == "mappo" else SafeMAPPOPolicy(cfg)
-    return build_research_policy(method, cfg)
+    return build_paper_policy(method, cfg)
 
 
 def run_research_simulation(cfg, method="ecprh", output=None, seed=None,
@@ -49,7 +40,9 @@ def run_research_simulation(cfg, method="ecprh", output=None, seed=None,
 
     The virtual SimulationWorld is used only for PTZ execution. SearchMonitorMission
     owns target truth/perception/evaluation, preserving the exact same task semantics
-    later used by the hardware-mirror control center.
+    later used by the hardware-mirror control center. Non-learning methods are
+    constructed exclusively through ``build_paper_policy`` so batch, GUI and mirror
+    cannot silently drift to different implementations.
     """
     cfg = prepare_research_config(cfg, method, seed)
     world = SimulationWorld(cfg)
@@ -86,5 +79,6 @@ def run_research_simulation(cfg, method="ecprh", output=None, seed=None,
     write_research_provenance(recorder.path, cfg=cfg, extra={
         "run_method": str(method), "run_seed": run_seed,
         "environment": "sim", "completed": bool(completed),
+        "policy_builder": "zr10lab.research.paper_policies:build_paper_policy",
     })
     return recorder.path
