@@ -1,0 +1,9 @@
+extends: ../search_monitor_base.yaml
+system: {duration_s: 60}
+policy:
+  research:
+    scenario:
+      id: S0-no-target
+      roi: {x: [100,160], y: [-50,50], z: [35,85]}
+      remove_outside_roi: true
+      targets: []
