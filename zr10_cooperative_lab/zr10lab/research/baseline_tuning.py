@@ -14,11 +14,16 @@ from .batch import _last_cycle_metrics, _write_table
 from .runner import run_research_simulation
 
 
+# Baseline selection must not reward a policy for simply failing to discover a
+# target.  Discovery failure is therefore the first lexicographic criterion.  The
+# censored delay includes an undiscovered target's observed in-ROI lifetime, while
+# the following monitoring metrics apply only after discovery by task definition.
 SELECTION_METRICS = (
+    "research_missed_target_rate",
+    "research_detection_delay_censored_p95_s",
     "research_total_loss_s",
     "research_max_loss_gap_s",
     "research_revisit_age_p95_s",
-    "research_detection_delay_p95_s",
 )
 
 
@@ -93,7 +98,10 @@ def tune_baseline(method, validation_configs, seeds, grid: dict[str, list], outp
     selected_params={key:selected[f"param_{key}"] for key in keys}
     document={
         "method":method,
-        "selection_rule":"lexicographic validation means: total loss, max gap, revisit P95, detection-delay P95",
+        "selection_rule":(
+            "lexicographic validation means: missed-target rate, censored detection-delay P95, "
+            "post-discovery total loss, maximum loss gap, revisit-age P95"
+        ),
         "selection_metrics":list(SELECTION_METRICS),
         "validation_configs":[str(Path(x).resolve()) for x in validation_configs],
         "validation_seeds":[int(x) for x in seeds],
