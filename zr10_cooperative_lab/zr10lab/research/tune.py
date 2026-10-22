@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import copy
-import csv
 import itertools
 import json
 from pathlib import Path
@@ -29,35 +27,39 @@ def _dominates(a, b):
 
 def tune_weighted_rh(validation_configs, seeds=(101, 102, 103),
                      loss_weights=(1.0, 3.0, 10.0, 30.0, 100.0),
+                     overlap_weights=(1.0, 3.0, 10.0),
                      search_weights=(0.3, 1.0, 3.0),
                      motion_weights=(0.0, 0.03, 0.1),
                      output="runs/weighted_tuning"):
-    """Tune the weighted-RH baseline without using test scenarios.
+    """Tune weighted RH only on validation scenarios, never held-out tests.
 
-    Every candidate is evaluated on exactly the same validation configurations and
-    seeds.  We retain the Pareto set for monitoring loss, discovery latency and
-    revisit age, then choose the point closest to the normalized validation ideal.
-    The full table is saved so the choice is auditable rather than hand-picked.
+    Weighted RH uses the same target-loss, soft-overlap, search and execution
+    variables as ECP-RH. Its four finite weights are selected without looking at
+    test data. The full grid and Pareto set are preserved for auditability.
     """
     root = Path(output).resolve(); root.mkdir(parents=True, exist_ok=True)
     rows = []
     configurations = [Path(p).resolve() for p in validation_configs]
-    for loss_w, search_w, motion_w in itertools.product(loss_weights, search_weights, motion_weights):
+    grid = itertools.product(loss_weights, overlap_weights, search_weights, motion_weights)
+    for loss_w, overlap_w, search_w, motion_w in grid:
         run_metrics = []
         for config_path in configurations:
             for seed in seeds:
                 cfg = load_config(config_path)
                 weights = cfg.policy.setdefault("research", {}).setdefault("baselines", {}).setdefault("weighted_rh", {})
-                weights.update(loss_weight=float(loss_w), search_weight=float(search_w), motion_weight=float(motion_w))
+                weights.update(
+                    loss_weight=float(loss_w), overlap_weight=float(overlap_w),
+                    search_weight=float(search_w), motion_weight=float(motion_w),
+                )
                 run_dir = run_research_simulation(cfg, "weighted_rh", root / "runs", int(seed))
-                metrics = _last_cycle_metrics(Path(run_dir))
-                run_metrics.append(metrics)
-        summary = {"loss_weight": float(loss_w), "search_weight": float(search_w), "motion_weight": float(motion_w),
-                   "runs": len(run_metrics)}
+                run_metrics.append(_last_cycle_metrics(Path(run_dir)))
+        summary = {
+            "loss_weight": float(loss_w), "overlap_weight": float(overlap_w),
+            "search_weight": float(search_w), "motion_weight": float(motion_w),
+            "runs": len(run_metrics),
+        }
         for key in OBJECTIVES:
             values = [m.get(key) for m in run_metrics if isinstance(m.get(key), (int, float))]
-            # A validation set for tuning should contain targets; missing discovery
-            # metrics are treated as invalid rather than silently rewarded.
             summary[key] = float(np.mean(values)) if values else float("inf")
         rows.append(summary)
         _write_table(root / "tuning_raw.csv", rows)
@@ -65,9 +67,8 @@ def tune_weighted_rh(validation_configs, seeds=(101, 102, 103),
     finite = [row for row in rows if all(np.isfinite(row[key]) for key in OBJECTIVES)]
     if not finite:
         raise RuntimeError("weighted RH tuning produced no finite validation objective set")
-    pareto = [row for row in finite if not any(_dominates(other, row) for other in finite if other is not row)]
-    # Normalize over all finite validation candidates, then choose the nearest point
-    # to the componentwise ideal on the Pareto set. Equal axes are ignored.
+    pareto = [row for row in finite
+              if not any(_dominates(other, row) for other in finite if other is not row)]
     mins = {key: min(row[key] for row in finite) for key in OBJECTIVES}
     maxs = {key: max(row[key] for row in finite) for key in OBJECTIVES}
     for row in pareto:
@@ -90,9 +91,9 @@ def tune_weighted_rh(validation_configs, seeds=(101, 102, 103),
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Tune the weighted RH-MPC baseline on validation scenarios only")
-    parser.add_argument("configs", nargs="+", help="Validation scenario YAML files; never pass held-out test files")
-    parser.add_argument("--seeds", nargs="+", type=int, default=[101,102,103])
+    parser = argparse.ArgumentParser(description="Tune weighted RH-MPC on validation scenarios only")
+    parser.add_argument("configs", nargs="+", help="Validation YAML files; never pass held-out test files")
+    parser.add_argument("--seeds", nargs="+", type=int, default=[101, 102, 103])
     parser.add_argument("--output", default="runs/weighted_tuning")
     args = parser.parse_args(argv)
     print(json.dumps(tune_weighted_rh(args.configs, args.seeds, output=args.output), ensure_ascii=False, indent=2))
