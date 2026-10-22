@@ -1,0 +1,39 @@
+extends: ../search_monitor_base.yaml
+system: {duration_s: 90}
+policy:
+  research:
+    scenario:
+      id: S6-contention
+      roi: {x: [100,160], y: [-50,50], z: [35,85]}
+      remove_outside_roi: true
+      targets:
+        - id: private_target_1
+          start_s: 6
+          end_s: 75
+          trajectory: cv
+          position_m: [100,-44,48]
+          velocity_mps: [1.4,0.9,0.18]
+        - id: private_target_2
+          start_s: 14
+          end_s: 82
+          trajectory: cv
+          position_m: [101,43,72]
+          velocity_mps: [1.35,-0.75,-0.08]
+        - id: private_target_3
+          start_s: 24
+          end_s: 88
+          trajectory: turn
+          position_m: [103,-5,81]
+          speed_mps: 1.8
+          heading_deg: 5
+          turn_rate_dps: 3.0
+          climb_mps: -0.06
+        - id: private_target_4
+          start_s: 34
+          end_s: 90
+          trajectory: sin
+          position_m: [104,10,54]
+          velocity_mps: [1.2,-0.1,0.05]
+          amplitude_m: [0,16,5]
+          period_s: 28
+          phase_rad: [0,1.2,0.4]
