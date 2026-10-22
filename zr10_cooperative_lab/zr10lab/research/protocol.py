@@ -13,6 +13,9 @@ from .batch import run_batch
 from .statistics import paired_comparisons
 
 
+_TEST_TOKENS = ("S10_heldout", "S11_heldout", "S9a_ood", "S9b_ood", "S7_overload")
+
+
 def load_manifest(path: str | Path):
     path = Path(path).resolve()
     data = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
@@ -42,8 +45,14 @@ def describe_split(manifest_path: str | Path, split: str) -> dict:
         "seeds": [int(x) for x in spec.get("seeds", [])],
         "primary_methods": list(manifest.get("methods", {}).get("primary", [])),
         "parameterized_baselines": list(manifest.get("methods", {}).get("parameterized_baselines", [])),
+        "learning_optional": list(manifest.get("methods", {}).get("learning_optional_after_training", [])),
         "rules": list(manifest.get("rules", [])),
     }
+
+
+def _mentions_heldout(values) -> bool:
+    text = " ".join(map(str, values or []))
+    return any(token in text for token in _TEST_TOKENS)
 
 
 def _read_baseline_selections(directory: str | Path, required_methods) -> dict[str, dict]:
@@ -52,32 +61,71 @@ def _read_baseline_selections(directory: str | Path, required_methods) -> dict[s
     for method in required_methods:
         path = directory / method / f"selected_{method}.json"
         if not path.is_file():
-            # Also support a flat folder for users who copied only the frozen JSONs.
             path = directory / f"selected_{method}.json"
         if not path.is_file():
             raise ValueError(f"missing validation-selected parameters for {method}: expected selected_{method}.json under {directory}")
         data = json.loads(path.read_text(encoding="utf-8"))
         if data.get("method") != method or not isinstance(data.get("selected_params"), dict):
             raise ValueError(f"invalid baseline selection file: {path}")
-        # Defensive leakage check: selection documents produced by our tuner record
-        # all configs/seeds. Reject a document that obviously names held-out tests.
-        validation_configs = " ".join(map(str, data.get("validation_configs", [])))
-        if any(token in validation_configs for token in ("S10_heldout", "S11_heldout", "S9a_ood", "S9b_ood", "S7_overload")):
+        if _mentions_heldout(data.get("validation_configs", [])):
             raise ValueError(f"baseline selection for {method} appears to use held-out test scenarios")
         selections[method] = {"path": str(path), "params": copy.deepcopy(data["selected_params"])}
     return selections
 
 
-def _resolved_scenarios(scenarios, root: Path, selections: dict[str, dict]):
-    if not selections:
+def _read_learning_selections(directory: str | Path, required_methods) -> dict[str, dict]:
+    """Read validation-selected MAPPO checkpoints and reject obvious test leakage."""
+    directory = Path(directory).resolve()
+    selections = {}
+    for method in required_methods:
+        candidates = [
+            directory / method / "selected_checkpoint.json",
+            directory / f"selected_{method}_checkpoint.json",
+        ]
+        path = next((p for p in candidates if p.is_file()), None)
+        if path is None:
+            raise ValueError(
+                f"missing frozen validation-selected checkpoint for {method}; expected "
+                f"{method}/selected_checkpoint.json under {directory}"
+            )
+        data = json.loads(path.read_text(encoding="utf-8"))
+        expected_safe = method == "safe_mappo"
+        if bool(data.get("safe", False)) != expected_safe:
+            raise ValueError(f"learning selection {path} safe flag does not match method {method}")
+        if _mentions_heldout(data.get("validation_configs", [])):
+            raise ValueError(f"learning selection for {method} appears to use held-out test scenarios")
+        selected = data.get("selected")
+        checkpoint = selected.get("checkpoint") if isinstance(selected, dict) else None
+        if not checkpoint:
+            raise ValueError(f"learning selection file contains no selected checkpoint: {path}")
+        checkpoint_path = Path(checkpoint).expanduser()
+        if not checkpoint_path.is_absolute():
+            checkpoint_path = (path.parent / checkpoint_path).resolve()
+        else:
+            checkpoint_path = checkpoint_path.resolve()
+        if not checkpoint_path.is_file():
+            raise ValueError(f"selected checkpoint does not exist: {checkpoint_path}")
+        selections[method] = {
+            "path": str(path), "model_path": str(checkpoint_path),
+            "device": str(data.get("device", "cpu")),
+        }
+    return selections
+
+
+def _resolved_scenarios(scenarios, root: Path, baseline_selections: dict[str, dict],
+                        learning_selections: dict[str, dict]):
+    if not baseline_selections and not learning_selections:
         return scenarios
     folder = root / "resolved_configs"; folder.mkdir(parents=True, exist_ok=True)
     result=[]
     for source in scenarios:
         cfg=load_config(source)
         baselines=cfg.policy.setdefault("research",{}).setdefault("baselines",{})
-        for method, item in selections.items():
+        for method, item in baseline_selections.items():
             baselines.setdefault(method,{}).update(copy.deepcopy(item["params"]))
+        for method, item in learning_selections.items():
+            baselines.setdefault(method,{}).update({
+                "model_path": item["model_path"], "device": item.get("device", "cpu")})
         document=cfg.to_dict(); document.pop("source",None)
         path=folder/f"{Path(source).stem}_resolved.yaml"
         path.write_text(yaml.safe_dump(jsonable(document),allow_unicode=True,sort_keys=False),encoding="utf-8")
@@ -87,7 +135,8 @@ def _resolved_scenarios(scenarios, root: Path, selections: dict[str, dict]):
 
 def run_split(manifest_path: str | Path, split: str, output: str | Path,
               methods=None, continue_on_error=True, paired=True,
-              baseline_selection_dir: str | Path | None=None):
+              baseline_selection_dir: str | Path | None=None,
+              learning_selection_dir: str | Path | None=None):
     path, manifest = load_manifest(manifest_path)
     spec = manifest.get("splits", {}).get(split)
     if not isinstance(spec, dict):
@@ -106,25 +155,36 @@ def run_split(manifest_path: str | Path, split: str, output: str | Path,
             raise ValueError("manifest illegally assigns a test split to tuning")
 
     parameterized = set(manifest.get("methods", {}).get("parameterized_baselines", []))
-    required = sorted(parameterized.intersection(chosen))
-    selections = {}
-    if split in ("test_main", "test_ood") and required:
+    required_baselines = sorted(parameterized.intersection(chosen))
+    learning_methods = set(manifest.get("methods", {}).get("learning_optional_after_training", []))
+    required_learning = sorted(learning_methods.intersection(chosen))
+    baseline_selections = {}
+    learning_selections = {}
+    if split in ("test_main", "test_ood") and required_baselines:
         if baseline_selection_dir is None:
             raise ValueError(
                 "test split includes parameterized baselines but no frozen validation selections were supplied; "
                 "run zr10lab.research.baseline_tuning first and pass --baseline-selections"
             )
-        selections = _read_baseline_selections(baseline_selection_dir, required)
+        baseline_selections = _read_baseline_selections(baseline_selection_dir, required_baselines)
+    if split in ("test_main", "test_ood") and required_learning:
+        if learning_selection_dir is None:
+            raise ValueError(
+                "test split includes MAPPO/Safe-MAPPO but no validation-selected checkpoints were supplied; "
+                "run mappo_protocol select first and pass --learning-selections"
+            )
+        learning_selections = _read_learning_selections(learning_selection_dir, required_learning)
 
     root = Path(output).resolve() / split
     root.mkdir(parents=True, exist_ok=True)
-    run_scenarios = _resolved_scenarios(scenarios, root, selections)
+    run_scenarios = _resolved_scenarios(scenarios, root, baseline_selections, learning_selections)
     snapshot = {
         "manifest": str(path), "split": split,
         "source_scenarios": [str(p) for p in scenarios],
         "resolved_scenarios": [str(p) for p in run_scenarios],
         "seeds": seeds, "methods": chosen,
-        "baseline_selections": selections,
+        "baseline_selections": baseline_selections,
+        "learning_selections": learning_selections,
         "rules": manifest.get("rules", []),
     }
     (root / "protocol_snapshot.json").write_text(
@@ -152,6 +212,8 @@ def main(argv=None):
     parser.add_argument("--output", default="runs/paper_protocol")
     parser.add_argument("--baseline-selections",
                         help="folder containing validation-selected selected_<method>.json files")
+    parser.add_argument("--learning-selections",
+                        help="folder containing <method>/selected_checkpoint.json for MAPPO baselines")
     parser.add_argument("--fail-fast", action="store_true")
     parser.add_argument("--describe", action="store_true",
                         help="print resolved split without running any experiment")
@@ -162,7 +224,8 @@ def main(argv=None):
         return
     root = run_split(args.manifest, args.split, args.output, args.methods,
                      continue_on_error=not args.fail_fast, paired=not args.no_paired,
-                     baseline_selection_dir=args.baseline_selections)
+                     baseline_selection_dir=args.baseline_selections,
+                     learning_selection_dir=args.learning_selections)
     print(root)
 
 
