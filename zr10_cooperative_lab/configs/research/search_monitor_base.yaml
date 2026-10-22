@@ -17,7 +17,6 @@ action_space:
 
 policy:
   mission: search_monitor
-  # The custom control-center modes below each receive an independent policy copy.
   research:
     mission: search_monitor
     method: ecprh
@@ -47,10 +46,9 @@ policy:
     planning:
       horizon_s: 3.0
       slot_s: 0.5
-      # Device/world dynamics remain 10 Hz; all research methods normally decide
-      # at 2 Hz, with the same discrete task-event early-replanning opportunities.
       replan_period_s: 0.5
       event_replan: true
+      use_execution_model: true
       solver_time_limit_s: 0.12
       solver_mip_rel_gap: 0.001
       search_candidates_per_device: 8
@@ -60,15 +58,13 @@ policy:
       use_uncertainty: true
       inter_sample_motion_factor: 0.5
       fov_margin_deg: 0.25
-      # Desired source/destination overlap. The optimizer models overlap with a
-      # bounded satisfaction variable instead of a hard infeasible constraint.
       handover_overlap_s: 0.5
       search_zoom_levels: [1.0, 2.0]
       tracking_zoom_levels: [2.0, 4.0, 6.0, 8.0]
       action_ttl_s: 0.8
     baselines:
       weighted_rh: {loss_weight: 10.0, overlap_weight: 3.0, search_weight: 1.0, motion_weight: 0.1}
-      greedy: {target_value: 100.0, search_value: 1.0, motion_cost: 0.1}
+      greedy: {}
       classical_ptz: {track_weight: 4.0, search_weight: 1.0, risk_weight: 2.0, motion_weight: 0.15}
       info_planner: {track_information_weight: 1.0, discovery_weight: 1.0, motion_weight: 0.05}
       ssm: {gamma: 0.92, monitor_weight: 4.0, search_weight: 1.0, motion_weight: 0.08}
@@ -126,9 +122,9 @@ control_center:
       requires_calibration: false
       settings: {mission: search_monitor}
     - id: greedy
-      label: Myopic Greedy
-      description: 单步即时收益贪心基线。
-      policy: zr10lab.research.policies:MyopicGreedyPolicy
+      label: Execution-aware Myopic Greedy
+      description: 使用相同可执行候选，在各候选最早可感知时隙做单步词典序贪心，不进行多步联合规划。
+      policy: zr10lab.research.strong_baselines:ExecutionAwareMyopicGreedyPolicy
       requires_detection: false
       requires_calibration: false
       settings: {mission: search_monitor}
