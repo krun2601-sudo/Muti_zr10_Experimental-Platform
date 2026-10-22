@@ -22,7 +22,11 @@ def _angle_norm(value):
 
 
 class ResearchObservationEncoder:
-    """Fixed-size per-agent observation used by MAPPO and safe MAPPO."""
+    """Fixed-size per-agent observation used by MAPPO and safe MAPPO.
+
+    The observation contains only policy-available anonymous beliefs and search
+    state. Hidden target truth may be used by the training reward, never here.
+    """
 
     def __init__(self, cfg, max_targets=6, top_search_cells=8):
         self.cfg = cfg
@@ -122,6 +126,11 @@ class ResearchMARLEnv:
     early so the learned policy receives the same opportunity to replan. The PPO
     implementation still uses a per-decision discount; this is an explicit learning
     approximation when event intervals are shorter than the nominal period.
+
+    Training reward/cost may use hidden task truth as privileged supervision. This
+    does not enter the actor observation. In particular, active-but-undiscovered
+    targets incur cost, preventing a constrained policy from reducing its apparent
+    monitoring risk by deliberately avoiding discovery.
     """
 
     def __init__(self, cfg, seed=0, max_targets=6, top_search_cells=8):
@@ -137,9 +146,13 @@ class ResearchMARLEnv:
         self.duration_s = float(self.cfg.system.get("duration_s", 60))
         learning = self.cfg.policy.get("research", {}).get("learning", {})
         self.loss_penalty = float(learning.get("loss_penalty", 8.0))
+        self.missed_active_penalty = float(learning.get("missed_active_penalty", self.loss_penalty))
         self.search_age_weight = float(learning.get("search_age_weight", 1.0))
         self.discovery_bonus = float(learning.get("discovery_bonus", 2.0))
         self.motion_weight = float(learning.get("motion_weight", 0.05))
+        if min(self.loss_penalty, self.missed_active_penalty, self.search_age_weight,
+               self.discovery_bonus, self.motion_weight) < 0:
+            raise ValueError("research learning reward weights must be nonnegative")
         self._world = None; self._mission = None; self._context = None
         self._decision_step = 0; self._previous_discovered = 0
         self._previous_actions = np.zeros((len(self.cfg.active_devices), 3), dtype=float)
@@ -196,15 +209,28 @@ class ResearchMARLEnv:
             self._world.advance(commands, self.dt)
             states = self._world.states(); self._mission.step(self._world.t, self.dt, states)
             status = self._mission.last_perception.target_status
+            active_count = len(status)
             discovered = [x for x in status if x.discovered]
             lost = sum(not bool(x.visible_devices) for x in discovered)
+            undiscovered = active_count - len(discovered)
             new_discovered = max(0, self._mission.last_perception.discovered_active_count - self._previous_discovered)
             self._previous_discovered = self._mission.last_perception.discovered_active_count
             age_mean = float(np.mean(self._mission.last_search.ages_s))
             age_cap = float(self.cfg.policy.get("research", {}).get("search", {}).get("age_cap_s", 120.0))
-            reward_total += (self.discovery_bonus * new_discovered - self.loss_penalty * lost
-                             - self.search_age_weight * age_mean / max(age_cap, 1e-9))
-            cost_total += lost / max(len(discovered), 1); frames += 1
+            task_denominator = max(active_count, 1)
+            lost_rate = lost / task_denominator
+            undiscovered_rate = undiscovered / task_denominator
+            reward_total += (
+                self.discovery_bonus * new_discovered
+                - self.loss_penalty * lost_rate
+                - self.missed_active_penalty * undiscovered_rate
+                - self.search_age_weight * age_mean / max(age_cap, 1e-9)
+            )
+            # Safe-MAPPO cost represents current task failure fraction: either an
+            # active target has not yet been discovered, or a discovered target has
+            # no valid geometric view. This closes the avoid-discovery loophole.
+            cost_total += (lost + undiscovered) / task_denominator
+            frames += 1
             provisional = self._context_from(states, self._decision_step + 1)
             signature = self._event_signature(provisional)
             if self.event_replan and signature != self._last_event_signature:
@@ -224,5 +250,6 @@ class ResearchMARLEnv:
         denominator = max(frames, 1)
         info = {"metrics": dict(self._mission.last_metrics), "time_s": self._world.t,
                 "cost": float(cost_total / denominator), "frames_executed": frames,
-                "event_triggered": bool(event_triggered)}
+                "event_triggered": bool(event_triggered),
+                "reward_uses_privileged_truth": True}
         return obs, obs.reshape(-1).copy(), float(reward_total / denominator), float(cost_total / denominator), done, info
