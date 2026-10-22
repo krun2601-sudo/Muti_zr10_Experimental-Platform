@@ -7,6 +7,11 @@ system:
   rate_hz: 10
   duration_s: 90
 
+# The inherited legacy simulator target list is intentionally cleared. Research
+# target truth lives only under policy.research.scenario.
+simulation:
+  targets: []
+
 action_space:
   enabled: [yaw_deg, pitch_deg, zoom]
 
@@ -37,13 +42,12 @@ policy:
         y: [-50, 50]
         z: [35, 85]
       grid: [7, 9, 3]
-      # Nonzero initial age makes all cells initially valuable while remaining
-      # finite and directly interpretable.
       initial_age_s: 10.0
       age_cap_s: 120.0
     planning:
       horizon_s: 3.0
       slot_s: 0.5
+      # Control/visualization remains 10 Hz, while expensive scheduling is 2 Hz.
       replan_period_s: 0.5
       solver_time_limit_s: 0.12
       solver_mip_rel_gap: 0.001
@@ -105,14 +109,14 @@ control_center:
     - id: ecprh
       label: ECP-RH（本文方法）
       description: 执行约束、连续可见优先的滚动时域调度。
-      policy: zr10lab.research.policies:ECPRHPolicy
+      policy: zr10lab.research.realtime_policies:RealtimeECPRHPolicy
       requires_detection: false
       requires_calibration: false
       settings: {mission: search_monitor}
     - id: weighted_rh
       label: Weighted RH-MPC
-      description: 与本文方法共享预测和候选原语的加权滚动时域基线。
-      policy: zr10lab.research.policies:WeightedRHPolicy
+      description: 与本文方法共享预测和候选原语、相同重规划周期的加权滚动时域基线。
+      policy: zr10lab.research.realtime_policies:RealtimeWeightedRHPolicy
       requires_detection: false
       requires_calibration: false
       settings: {mission: search_monitor}
