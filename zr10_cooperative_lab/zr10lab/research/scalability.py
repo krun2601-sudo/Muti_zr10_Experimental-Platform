@@ -13,7 +13,7 @@ from ..config import load_config
 from ..models import PolicyContext, Track
 from ..simulation import SimulationWorld
 from .optimization import PriorityHorizonMILP
-from .priority_policies import _ConfigurableExecutionFactory
+from .paper_policies import _RiskExecutionFactory
 
 
 def _search_grid(cfg):
@@ -34,7 +34,6 @@ def _tracks(cfg, count):
     rows = []
     for j in range(int(count)):
         alpha = (j + 1) / (count + 1) if count else 0.5
-        # Deterministic spread covers center and edges without any private truth.
         x = x0 + (0.25 + 0.5 * alpha) * (x1 - x0)
         y = y0 + ((j * 0.61803398875) % 1.0) * (y1 - y0)
         z = z0 + (0.2 + 0.6 * ((j * 0.41421356237) % 1.0)) * (z1 - z0)
@@ -69,10 +68,10 @@ def benchmark_case(cfg, target_count: int, search_candidates_per_device: int,
                           for key in states},
         },
     )
-    generation_ms = []; solve_ms = []; statuses = []; timeouts = []
+    generation_ms = []; solve_ms = []; statuses = []; timeouts = []; certified = []
     candidate_count = overlap_count = None
     for _ in range(max(1, int(repetitions))):
-        factory = _ConfigurableExecutionFactory(local)
+        factory = _RiskExecutionFactory(local)
         t0 = time.perf_counter(); ps = factory.generate(context)
         generation_ms.append((time.perf_counter()-t0)*1000.0)
         candidate_count = len(ps.flat); overlap_count = len(ps.overlap_requirements)
@@ -81,6 +80,7 @@ def benchmark_case(cfg, target_count: int, search_candidates_per_device: int,
             float(planning.get("solver_mip_rel_gap", 0.001)))
         _, diag = solver.solve_lexicographic("ecprh_scalability")
         solve_ms.append(float(diag.solve_ms)); statuses.append(diag.status); timeouts.append(bool(diag.timeout))
+        certified.append(bool(diag.extras.get("priority_certified", False)))
     return {
         "device_count": len(local.active_devices),
         "target_count": int(target_count),
@@ -93,6 +93,7 @@ def benchmark_case(cfg, target_count: int, search_candidates_per_device: int,
         "solve_ms_mean": float(np.mean(solve_ms)),
         "solve_ms_p95": float(np.percentile(solve_ms,95)),
         "timeout_rate": float(np.mean(timeouts)),
+        "priority_certification_rate": float(np.mean(certified)),
         "statuses": "|".join(statuses),
         "repetitions": max(1, int(repetitions)),
     }
