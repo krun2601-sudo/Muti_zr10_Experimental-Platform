@@ -7,6 +7,7 @@ from ..actions import ActionValidator
 from ..models import Decision, PolicyContext
 from ..recording import dumps
 from ..runtime import Experiment
+from .execution import ExecutionEvaluator
 
 
 class ResearchExperiment(Experiment):
@@ -29,6 +30,7 @@ class ResearchExperiment(Experiment):
         super().__init__(cfg, recorder, policy=policy)
         self.mission = mission
         self.validator = ActionValidator(cfg)
+        self.execution = ExecutionEvaluator()
         planning = cfg.policy.get("research", {}).get("planning", {})
         self.replan_period_s = float(planning.get("replan_period_s", 0.5))
         self.event_replan = bool(planning.get("event_replan", True))
@@ -138,6 +140,12 @@ class ResearchExperiment(Experiment):
                 self.recorder.event("action_rejected", {"device_id": key, "error": str(exc)}, t)
                 raise
 
+        execution = self.execution.update(
+            dt, states, getattr(self.mission, "last_readiness", {}), actions, replanned)
+        # MissionStep.metrics is an experiment-side mutable dictionary even though
+        # the MissionStep container is frozen. Policies never receive this object.
+        mission_step.metrics.update(execution.metrics())
+
         # Reuse the platform's standard tables. Research truth is evaluation-only
         # and never appears in the PolicyContext above.
         self._record(t, states, mission_step.detections, (), mission_step.tracks, (), actions,
@@ -162,7 +170,8 @@ class ResearchExperiment(Experiment):
         elapsed_ms = (time.perf_counter() - begin) * 1000.0
         diagnostics = {"policy": decision.diagnostics, "research_mission": True,
                        "replanned": replanned, "replan_reason": replan_reason,
-                       "decision_compute_ms": decision_compute_ms}
+                       "decision_compute_ms": decision_compute_ms,
+                       "execution": execution.metrics()}
         self.recorder.write(
             "cycles", t, step=self.step, dt_s=dt, work_ms=elapsed_ms,
             deadline_miss=elapsed_ms > dt * 1000.0,
