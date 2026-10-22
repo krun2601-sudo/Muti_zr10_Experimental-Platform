@@ -30,22 +30,49 @@ def _score(summary):
     return tuple(_metric(summary.get(key)) for key in SELECTION_METRICS)
 
 
-def tune_baseline(method, validation_configs, seeds, grid: dict[str, list], output):
-    """Tune one parameterized baseline using only the frozen validation split.
+def _budgeted_combinations(method, validation_configs, keys, values,
+                           max_combinations: int | None, sample_seed: int):
+    all_rows=list(itertools.product(*values))
+    if not max_combinations or len(all_rows)<=int(max_combinations):
+        return all_rows
+    budget=max(1,int(max_combinations))
+    rng=np.random.default_rng(int(sample_seed))
+    chosen=set()
+    # Always include the declared default parameter tuple when every default lies
+    # inside the grid. This makes "no tuning" a candidate under the same budget.
+    cfg=load_config(validation_configs[0])
+    default=cfg.policy.get("research",{}).get("baselines",{}).get(method,{})
+    default_tuple=tuple(default.get(key) for key in keys)
+    try:
+        default_index=all_rows.index(default_tuple)
+        chosen.add(default_index)
+    except ValueError:
+        pass
+    remaining=[i for i in range(len(all_rows)) if i not in chosen]
+    take=min(len(remaining),budget-len(chosen))
+    if take>0:
+        chosen.update(int(i) for i in rng.choice(remaining,size=take,replace=False))
+    return [all_rows[i] for i in sorted(chosen)]
 
-    All methods use the same lexicographic selection criterion:
-    total monitoring loss -> maximum loss gap -> revisit P95 -> detection-delay P95.
-    This prevents choosing a different favorable scalar objective for each baseline.
+
+def tune_baseline(method, validation_configs, seeds, grid: dict[str, list], output,
+                  max_combinations=24, sample_seed=20261022):
+    """Tune one parameterized baseline using a common validation-only budget.
+
+    Every parameterized baseline uses the same maximum number of candidate
+    parameter settings and the same lexicographic task metric selection rule.
+    Large Cartesian grids are deterministically subsampled with a fixed seed; the
+    currently declared default is included whenever it belongs to the grid.
     """
     if not grid:
         raise ValueError("baseline grid must contain at least one parameter")
-    keys = list(grid)
-    values = [list(grid[key]) for key in keys]
-    root = Path(output).resolve(); root.mkdir(parents=True, exist_ok=True)
+    keys=list(grid); values=[list(grid[key]) for key in keys]
+    combinations=_budgeted_combinations(method,validation_configs,keys,values,
+                                         max_combinations,sample_seed)
+    root=Path(output).resolve(); root.mkdir(parents=True,exist_ok=True)
     rows=[]; summaries=[]
-    for combination in itertools.product(*values):
-        params = dict(zip(keys, combination))
-        collected=[]
+    for combination in combinations:
+        params=dict(zip(keys,combination)); collected=[]
         for config_path in validation_configs:
             for seed in seeds:
                 cfg=load_config(config_path)
@@ -61,6 +88,7 @@ def tune_baseline(method, validation_configs, seeds, grid: dict[str, list], outp
             finite=[float(x[metric]) for x in collected if isinstance(x.get(metric),(int,float)) and np.isfinite(x[metric])]
             summary[metric]=float(np.mean(finite)) if finite else None
         summaries.append(summary); _write_table(root/"tuning_summary.csv",summaries)
+    if not summaries: raise RuntimeError("no baseline parameter combinations were evaluated")
     selected=min(summaries,key=_score)
     selected_params={key:selected[f"param_{key}"] for key in keys}
     document={
@@ -69,6 +97,10 @@ def tune_baseline(method, validation_configs, seeds, grid: dict[str, list], outp
         "selection_metrics":list(SELECTION_METRICS),
         "validation_configs":[str(Path(x).resolve()) for x in validation_configs],
         "validation_seeds":[int(x) for x in seeds],
+        "full_grid_size":int(np.prod([len(v) for v in values])),
+        "evaluated_parameter_count":len(combinations),
+        "max_combinations":int(max_combinations) if max_combinations else None,
+        "parameter_sample_seed":int(sample_seed),
         "grid":grid,
         "selected_params":selected_params,
         "selected_summary":selected,
@@ -91,8 +123,13 @@ def tune_from_manifest(manifest_path, method, output):
     if not isinstance(split,dict): raise ValueError(f"unknown tuning split {split_name}")
     root=manifest_path.parent
     configs=[(root/Path(p)).resolve() for p in split.get("scenarios",[])]
-    seeds=[int(x) for x in split.get("seeds",[])]
-    return tune_baseline(method,configs,seeds,tuning["grid"],Path(output)/method)
+    split_seeds=[int(x) for x in split.get("seeds",[])]
+    requested=[int(x) for x in tuning.get("tuning_seeds",split_seeds)]
+    if not set(requested).issubset(set(split_seeds)):
+        raise ValueError("baseline tuning seeds must be a subset of the declared validation split")
+    return tune_baseline(method,configs,requested,tuning["grid"],Path(output)/method,
+                         max_combinations=tuning.get("max_combinations",24),
+                         sample_seed=tuning.get("parameter_sample_seed",20261022))
 
 
 def main(argv=None):
