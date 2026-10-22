@@ -63,6 +63,8 @@ ablations:
   - {id: fixed_zoom, config: ablations/fixed_zoom.yaml}
   - {id: short_horizon, config: ablations/short_horizon.yaml}
   - {id: no_event_replan, config: ablations/no_event_replan.yaml}
+  - {id: no_execution_model, config: ablations/no_execution_model.yaml}
+  - {id: no_shared_fov, config: ablations/no_shared_fov.yaml}
 
 sensitivity:
   visibility_risk: [0.01,0.025,0.05,0.10,0.20]
@@ -90,7 +92,7 @@ metrics:
     - {name: research_total_pitch_motion_deg, direction: minimize}
     - {name: research_total_zoom_change, direction: minimize}
     - {name: research_assignment_switch_count, direction: minimize}
-    - {name: solver_p95_ms, direction: minimize}
+    - {name: solve_ms_p95, direction: minimize}
     - {name: solver_timeout_rate, direction: minimize}
 
 statistics:
