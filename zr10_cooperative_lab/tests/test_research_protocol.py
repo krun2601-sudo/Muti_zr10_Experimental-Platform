@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import yaml
 
 from zr10lab.config import load_config
-from zr10lab.models import PolicyContext
 from zr10lab.research.priority_policies import _ConfigurableExecutionFactory
+from zr10lab.research.rl_env import ResearchMARLEnv
 from zr10lab.research.scalability import benchmark_case
 from zr10lab.research.studies import _explicit_yaml_override, apply_override
 from zr10lab.simulation import SimulationWorld
@@ -61,3 +62,23 @@ def test_scalability_benchmark_small_case_runs():
     assert row["generation_ms_mean"] >= 0
     assert row["solve_ms_mean"] >= 0
     assert row["target_count"] == 1
+
+
+def test_mappo_training_env_returns_early_on_shared_replan_event():
+    cfg = load_config("configs/research/search_monitor_base.yaml")
+    cfg.system["duration_s"] = 2.0
+    cfg.policy["research"]["planning"]["replan_period_s"] = 0.5
+    cfg.policy["research"]["planning"]["event_replan"] = True
+    device_id = cfg.active_devices[0].id
+    # Deterministic connection edge at t=0.2 creates a task event independent of
+    # target detection luck or initial camera pointing.
+    cfg.simulation["outages"] = [{"device_id": device_id, "start_s": 0.2, "end_s": 1.5}]
+    env = ResearchMARLEnv(cfg, seed=5)
+    obs, _ = env.reset(seed=5)
+    assert obs.shape[0] == len(cfg.active_devices)
+    action = np.zeros((len(cfg.active_devices), 3), dtype=float)
+    _, _, _, _, done, info = env.step(action)
+    assert done is False
+    assert info["event_triggered"] is True
+    assert info["frames_executed"] == 2
+    assert info["time_s"] == 0.2
