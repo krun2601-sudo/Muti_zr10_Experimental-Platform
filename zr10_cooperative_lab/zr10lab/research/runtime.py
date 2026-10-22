@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import replace
 import time
 
@@ -11,20 +12,7 @@ from .execution import ExecutionEvaluator
 
 
 class ResearchExperiment(Experiment):
-    """Experiment variant for the virtual search/monitor mission.
-
-    It deliberately bypasses the original multi-station FusionEngine: target
-    beliefs come from SearchMonitorMission's controlled virtual perception.
-    The Policy/Action/validation/logging contracts stay identical.
-
-    Research policies are evaluated under one common decision contract: device
-    dynamics and visualization run at ``system.rate_hz``, while the expensive
-    scheduler is called only at ``planning.replan_period_s`` or on a discrete
-    task event (target/support/connection change). Between replans the last A/E/
-    Zoom set-points are renewed with a fresh action lease. This prevents a method
-    from receiving an accidental 10 Hz replanning advantage merely because the
-    virtual actuator loop runs at 10 Hz.
-    """
+    """Experiment variant for the virtual search/monitor mission."""
 
     def __init__(self, cfg, recorder, mission, policy=None):
         super().__init__(cfg, recorder, policy=policy)
@@ -41,6 +29,9 @@ class ResearchExperiment(Experiment):
         self._cached_policy_actions = {}
         self._cached_policy_diagnostics = {}
         self._policy_identity = id(self.policy)
+        self._replan_counts = Counter()
+        self._first_replan_t: float | None = None
+        self._last_replan_t: float | None = None
 
     @staticmethod
     def _event_signature(context: PolicyContext):
@@ -63,6 +54,27 @@ class ResearchExperiment(Experiment):
                 self.policy.cached = {}
             except Exception:
                 pass
+
+    def _register_replan(self, t: float, reason: str) -> None:
+        self._replan_counts[reason] += 1
+        self._replan_counts["total"] += 1
+        if self._first_replan_t is None:
+            self._first_replan_t = float(t)
+        self._last_replan_t = float(t)
+
+    def _replan_metrics(self, t: float) -> dict[str, float | int]:
+        elapsed = max(0.0, float(t) - float(self._first_replan_t or t))
+        count = int(self._replan_counts["total"])
+        # Exclude the first immediate plan from the empirical frequency numerator;
+        # otherwise very short smoke tests report an artificial high rate.
+        frequency = max(count - 1, 0) / elapsed if elapsed > 1e-12 else 0.0
+        return {
+            "research_replan_count": count,
+            "research_initial_replan_count": int(self._replan_counts["initial"]),
+            "research_periodic_replan_count": int(self._replan_counts["periodic"]),
+            "research_event_replan_count": int(self._replan_counts["event"]),
+            "research_replan_frequency_hz": float(frequency),
+        }
 
     def _decide(self, context: PolicyContext) -> tuple[Decision, bool, str, float]:
         if id(self.policy) != self._policy_identity:
@@ -88,6 +100,7 @@ class ResearchExperiment(Experiment):
             self._last_plan_t = float(context.t)
             self._last_event_signature = signature
             reason = "initial" if initial else "event" if event else "periodic"
+            self._register_replan(context.t, reason)
             diagnostics = dict(self._cached_policy_diagnostics)
             diagnostics.update(cached_plan=False, replan_reason=reason,
                                decision_compute_ms=compute_ms, plan_age_s=0.0)
@@ -111,9 +124,6 @@ class ResearchExperiment(Experiment):
         )
         decision, replanned, replan_reason, decision_compute_ms = self._decide(context)
 
-        # Model-based RH policies expose only anonymous track IDs predicted safely
-        # visible in the next horizon slot. Evaluation resolves those IDs privately
-        # at the due time. A newer event-triggered plan replaces the pending check.
         if replanned and isinstance(decision.diagnostics, dict):
             guaranteed = decision.diagnostics.get("guaranteed_targets_h1")
             delay = decision.diagnostics.get("risk_check_delay_s")
@@ -137,6 +147,7 @@ class ResearchExperiment(Experiment):
         execution = self.execution.update(
             dt, states, getattr(self.mission, "last_readiness", {}), actions, replanned)
         mission_step.metrics.update(execution.metrics())
+        mission_step.metrics.update(self._replan_metrics(t))
 
         self._record(t, states, mission_step.detections, (), mission_step.tracks, (), actions,
                      mission_step.truth_positions)
@@ -159,7 +170,8 @@ class ResearchExperiment(Experiment):
         diagnostics = {"policy": decision.diagnostics, "research_mission": True,
                        "replanned": replanned, "replan_reason": replan_reason,
                        "decision_compute_ms": decision_compute_ms,
-                       "execution": execution.metrics()}
+                       "execution": execution.metrics(),
+                       "replanning": self._replan_metrics(t)}
         self.recorder.write(
             "cycles", t, step=self.step, dt_s=dt, work_ms=elapsed_ms,
             deadline_miss=elapsed_ms > dt * 1000.0,
