@@ -1,0 +1,153 @@
+# Persistent-search / continuous-monitoring paper configuration.
+# All targets/perception are virtual.  In mirror mode physical ZR10 units only
+# execute the same A/E/Zoom commands; they do not provide target detections.
+extends: ../control_center.yaml
+
+system:
+  rate_hz: 10
+  duration_s: 90
+
+action_space:
+  enabled: [yaw_deg, pitch_deg, zoom]
+
+policy:
+  mission: search_monitor
+  # The custom control-center modes below each receive an independent policy copy.
+  research:
+    mission: search_monitor
+    method: ecprh
+    execution:
+      settle_s: 0.25
+      settle_rate_tolerance_dps: 0.15
+      zoom_stable_tolerance: 0.002
+      allow_sensing_while_moving: false
+      zoom_rate_per_s: 3.0
+    perception:
+      seed: 7
+      detection_probability: 0.96
+      position_noise_std_m: 1.0
+      velocity_noise_std_mps: 0.25
+      process_noise_m2ps: 0.25
+      initial_covariance_m2: 1.0
+      coast_timeout_s: 3.0
+      random_time_bin_s: 0.1
+    search:
+      roi:
+        x: [100, 160]
+        y: [-50, 50]
+        z: [35, 85]
+      grid: [7, 9, 3]
+      # Nonzero initial age makes all cells initially valuable while remaining
+      # finite and directly interpretable.
+      initial_age_s: 10.0
+      age_cap_s: 120.0
+    planning:
+      horizon_s: 3.0
+      slot_s: 0.5
+      replan_period_s: 0.5
+      solver_time_limit_s: 0.12
+      solver_mip_rel_gap: 0.001
+      search_candidates_per_device: 8
+      max_shared_targets: 3
+      prediction_process_noise_m2ps: 0.5
+      visibility_risk: 0.05
+      inter_sample_motion_factor: 0.5
+      fov_margin_deg: 0.25
+      handover_overlap_s: 0.5
+      search_zoom_levels: [1.0, 2.0]
+      tracking_zoom_levels: [2.0, 4.0, 6.0, 8.0]
+      action_ttl_s: 0.8
+    baselines:
+      weighted_rh: {loss_weight: 10.0, search_weight: 1.0, motion_weight: 0.1}
+      greedy: {target_value: 100.0, search_value: 1.0, motion_cost: 0.1}
+      classical_ptz: {track_weight: 4.0, search_weight: 1.0, risk_weight: 2.0, motion_weight: 0.15}
+      info_planner: {track_information_weight: 1.0, discovery_weight: 1.0, motion_weight: 0.05}
+      ssm: {gamma: 0.92, monitor_weight: 4.0, search_weight: 1.0, motion_weight: 0.08}
+    scenario:
+      id: S2-staggered
+      roi:
+        x: [100, 160]
+        y: [-50, 50]
+        z: [35, 85]
+      remove_outside_roi: true
+      targets:
+        - id: private_target_1
+          start_s: 6
+          end_s: 60
+          trajectory: cv
+          position_m: [100, -38, 52]
+          velocity_mps: [2.0, 1.0, 0.15]
+        - id: private_target_2
+          start_s: 18
+          end_s: 70
+          trajectory: turn
+          position_m: [102, 32, 66]
+          speed_mps: 2.4
+          heading_deg: -18
+          turn_rate_dps: -2.5
+          climb_mps: -0.05
+        - id: private_target_3
+          start_s: 32
+          end_s: 85
+          trajectory: sin
+          position_m: [104, -8, 73]
+          velocity_mps: [1.6, 0.15, -0.05]
+          amplitude_m: [0, 12, 3]
+          period_s: 24
+          phase_rad: [0, 0.2, 1.0]
+
+control_center:
+  enabled: true
+  video_enabled: true
+  default_mode: ecprh
+  duration_s: 90
+  modes:
+    - id: ecprh
+      label: ECP-RH（本文方法）
+      description: 执行约束、连续可见优先的滚动时域调度。
+      policy: zr10lab.research.policies:ECPRHPolicy
+      requires_detection: false
+      requires_calibration: false
+      settings: {mission: search_monitor}
+    - id: weighted_rh
+      label: Weighted RH-MPC
+      description: 与本文方法共享预测和候选原语的加权滚动时域基线。
+      policy: zr10lab.research.policies:WeightedRHPolicy
+      requires_detection: false
+      requires_calibration: false
+      settings: {mission: search_monitor}
+    - id: greedy
+      label: Myopic Greedy
+      description: 单步即时收益贪心基线。
+      policy: zr10lab.research.policies:MyopicGreedyPolicy
+      requires_detection: false
+      requires_calibration: false
+      settings: {mission: search_monitor}
+    - id: fixed_scan
+      label: Fixed Scan + Reactive Track
+      description: 固定分区周期扫描与反应式目标接管工程基线。
+      policy: zr10lab.research.policies:FixedScanReactivePolicy
+      requires_detection: false
+      requires_calibration: false
+      settings: {mission: search_monitor}
+    - id: classical_ptz
+      label: Classical Constrained PTZ
+      description: 经典受约束 PTZ 跟踪/机会观测思想的统一执行模型适配。
+      policy: zr10lab.research.policies:ClassicalPTZPolicy
+      requires_detection: false
+      requires_calibration: false
+      settings: {mission: search_monitor}
+    - id: info_planner
+      label: Information Planner
+      description: 发现/跟踪信息价值贪心规划基线。
+      policy: zr10lab.research.policies:InformationPlannerPolicy
+      requires_detection: false
+      requires_calibration: false
+      settings: {mission: search_monitor}
+    - id: ssm_belief
+      label: SSM Belief Look-ahead
+      description: 固定 PTZ 执行模型上的 simultaneous-search-monitoring belief look-ahead 适配。
+      policy: zr10lab.research.policies:SSMBeliefPolicy
+      requires_detection: false
+      requires_calibration: false
+      settings: {mission: search_monitor}
