@@ -5,7 +5,6 @@ import csv
 import json
 import math
 from pathlib import Path
-import statistics
 from typing import Iterable
 
 import numpy as np
@@ -46,6 +45,20 @@ def _solver_summary(run_dir: Path) -> dict:
     solve = [float(r["solve_ms"]) for r in rows if r.get("solve_ms") not in (None, "")]
     timeout = [str(r.get("timeout", "")).lower() in ("1", "true", "yes") for r in rows]
     gap = [float(r["mip_gap"]) for r in rows if r.get("mip_gap") not in (None, "")]
+    visibility_certified = []
+    priority_certified = []
+    weighted_certified = []
+    for row in rows:
+        try:
+            extras = json.loads(row.get("extras_json") or "{}")
+        except json.JSONDecodeError:
+            extras = {}
+        if "visibility_level_certified" in extras:
+            visibility_certified.append(bool(extras["visibility_level_certified"]))
+        if "priority_certified" in extras:
+            priority_certified.append(bool(extras["priority_certified"]))
+        if "weighted_objective_certified" in extras:
+            weighted_certified.append(bool(extras["weighted_objective_certified"]))
     return {
         "solve_count": len(rows),
         "solve_ms_mean": float(np.mean(solve)) if solve else None,
@@ -54,6 +67,12 @@ def _solver_summary(run_dir: Path) -> dict:
         "solver_timeout_rate": float(np.mean(timeout)) if timeout else None,
         "mip_gap_mean": float(np.mean(gap)) if gap else None,
         "mip_gap_max": float(np.max(gap)) if gap else None,
+        "visibility_level_certification_rate": (float(np.mean(visibility_certified))
+                                                 if visibility_certified else None),
+        "priority_certification_rate": (float(np.mean(priority_certified))
+                                         if priority_certified else None),
+        "weighted_objective_certification_rate": (float(np.mean(weighted_certified))
+                                                    if weighted_certified else None),
     }
 
 
