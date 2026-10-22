@@ -110,49 +110,49 @@ control_center:
     - id: ecprh
       label: ECP-RH（本文方法）
       description: 执行约束、连续可见优先、软交接缺口的事件触发滚动时域调度。
-      policy: zr10lab.research.priority_policies:PriorityECPRHPolicy
+      policy: zr10lab.research.paper_policies:PaperECPRHPolicy
       requires_detection: false
       requires_calibration: false
       settings: {mission: search_monitor}
     - id: weighted_rh
       label: Weighted RH-MPC
       description: 与本文方法共享预测、候选原语、软交接变量与决策机会的有限权重基线。
-      policy: zr10lab.research.priority_policies:PriorityWeightedRHPolicy
+      policy: zr10lab.research.paper_policies:PaperWeightedRHPolicy
       requires_detection: false
       requires_calibration: false
       settings: {mission: search_monitor}
     - id: greedy
       label: Execution-aware Myopic Greedy
       description: 使用相同可执行候选，在各候选最早可感知时隙做单步词典序贪心，不进行多步联合规划。
-      policy: zr10lab.research.strong_baselines:ExecutionAwareMyopicGreedyPolicy
+      policy: zr10lab.research.paper_policies:PaperGreedyPolicy
       requires_detection: false
       requires_calibration: false
       settings: {mission: search_monitor}
     - id: fixed_scan
       label: Fixed Scan + Reactive Track
       description: 固定分区周期扫描与反应式目标接管工程基线。
-      policy: zr10lab.research.policies:FixedScanReactivePolicy
+      policy: zr10lab.research.paper_policies:FixedScanReactivePolicy
       requires_detection: false
       requires_calibration: false
       settings: {mission: search_monitor}
     - id: classical_ptz
       label: Classical Constrained PTZ
       description: 经典受约束 PTZ 跟踪/机会观测思想的统一执行模型适配。
-      policy: zr10lab.research.policies:ClassicalPTZPolicy
+      policy: zr10lab.research.paper_policies:PaperClassicalPTZPolicy
       requires_detection: false
       requires_calibration: false
       settings: {mission: search_monitor}
     - id: info_planner
       label: Information Planner
       description: 发现/跟踪信息价值贪心规划基线。
-      policy: zr10lab.research.policies:InformationPlannerPolicy
+      policy: zr10lab.research.paper_policies:PaperInformationPlannerPolicy
       requires_detection: false
       requires_calibration: false
       settings: {mission: search_monitor}
     - id: ssm_belief
       label: SSM Belief Look-ahead
       description: 固定 PTZ 执行模型上的 simultaneous-search-monitoring belief look-ahead 适配。
-      policy: zr10lab.research.policies:SSMBeliefPolicy
+      policy: zr10lab.research.paper_policies:PaperSSMBeliefPolicy
       requires_detection: false
       requires_calibration: false
       settings: {mission: search_monitor}
