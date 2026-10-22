@@ -39,9 +39,11 @@ def test_soft_overlap_cannot_make_overloaded_problem_infeasible():
     solver = PriorityHorizonMILP(ps, time_limit_s=2.0, mip_rel_gap=0.0)
     selected, diag = solver.solve_lexicographic()
     assert selected and selected[0].index == keep.index
-    assert diag.level1 == pytest.approx(0.0, abs=1e-7)
-    assert diag.overlap_shortfall == pytest.approx(0.5, abs=1e-7)
-    assert diag.extras["overlap_satisfaction_fraction"] == pytest.approx(0.5, abs=1e-7)
+    assert diag.level1 == pytest.approx(0.0, abs=1e-6)
+    # Lexicographic locks intentionally allow 1e-7 numerical feasibility slack;
+    # assert at a solver-appropriate tolerance rather than demanding bit equality.
+    assert diag.overlap_shortfall == pytest.approx(0.5, abs=1e-6)
+    assert diag.extras["overlap_satisfaction_fraction"] == pytest.approx(0.5, abs=1e-6)
     assert "infeasible" not in diag.status
 
 
