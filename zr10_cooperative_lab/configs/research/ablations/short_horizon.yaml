@@ -1,0 +1,8 @@
+extends: ../scenarios/S6_contention.yaml
+policy:
+  research:
+    scenario: {id: A4-short-horizon}
+    planning:
+      horizon_s: 0.5
+      slot_s: 0.5
+      replan_period_s: 0.5
