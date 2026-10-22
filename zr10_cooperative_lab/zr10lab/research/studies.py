@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import copy
-import csv
 import json
 from pathlib import Path
 from typing import Any
@@ -24,24 +23,33 @@ def _deep_merge(target: dict, update: dict) -> dict:
 
 
 def _explicit_yaml_override(path: str | Path) -> dict:
-    """Read only fields explicitly written in an override YAML.
+    """Read only the actual method perturbation from an ablation YAML.
 
-    Ablation files themselves extend the base for standalone use, but when applying
-    one to a scenario we must not let the inherited default S2 scenario overwrite
-    the scenario under test. Therefore the study runner ignores the `extends` key
-    and merges only explicit fields from the ablation document.
+    Ablation YAMLs remain convenient standalone configs: many extend a scenario and
+    give that standalone run an A1/A2/... scenario label. When the same ablation is
+    applied across frozen S10/S11/etc. scenarios, however, *no scenario field is
+    allowed to leak from the ablation file*. Otherwise an ablation silently changes
+    two factors at once and destroys the causal comparison.
     """
     data = yaml.safe_load(Path(path).read_text(encoding="utf-8-sig"))
     if not isinstance(data, dict):
         raise ValueError(f"override must be a YAML mapping: {path}")
     data = copy.deepcopy(data)
     data.pop("extends", None)
+    research = data.get("policy", {}).get("research")
+    if isinstance(research, dict):
+        research.pop("scenario", None)
     return data
 
 
 def apply_override(cfg, override: dict):
     raw = cfg.to_dict(); raw.pop("source", None)
+    original_scenario = copy.deepcopy(raw.get("policy", {}).get("research", {}).get("scenario"))
     merged = _deep_merge(raw, override)
+    # Defense in depth: even a programmatically supplied override cannot replace
+    # the frozen scene being tested.
+    if original_scenario is not None:
+        merged.setdefault("policy", {}).setdefault("research", {})["scenario"] = original_scenario
     local = config_from_dict(merged)
     local.source = cfg.source
     return local
@@ -95,11 +103,12 @@ def run_ablations(scenarios, ablation_files, seeds, output="runs/ablations", inc
 
 def run_sensitivity(scenarios, dotted_path: str, values, seeds,
                     output="runs/sensitivity"):
+    if dotted_path.startswith("policy.research.scenario"):
+        raise ValueError("sensitivity studies may not modify the frozen scenario")
     variants = []
     for value in values:
         def transform(cfg, v=value):
-            local = copy.deepcopy(cfg)
-            raw = local.to_dict(); raw.pop("source", None)
+            raw = cfg.to_dict(); raw.pop("source", None)
             _set_path(raw, dotted_path, v)
             result = config_from_dict(raw); result.source = cfg.source
             return result
