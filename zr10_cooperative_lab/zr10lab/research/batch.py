@@ -4,6 +4,7 @@ import argparse
 import csv
 import json
 import math
+from collections import Counter
 from pathlib import Path
 from typing import Iterable
 
@@ -84,8 +85,36 @@ def _write_table(path: Path, rows: list[dict]) -> None:
         writer.writeheader(); writer.writerows(rows)
 
 
+def _write_batch_status(index_rows: list[dict], output: Path) -> dict:
+    counts = Counter(str(row.get("status", "unknown")) for row in index_rows)
+    failures = Counter(str(row.get("error", "unknown failure")) for row in index_rows
+                       if row.get("status") == "failed")
+    by_method = {}
+    by_scenario = {}
+    for row in index_rows:
+        method = str(row.get("method", "unknown"))
+        scenario = str(row.get("scenario", "unknown"))
+        by_method.setdefault(method, Counter())[str(row.get("status", "unknown"))] += 1
+        by_scenario.setdefault(scenario, Counter())[str(row.get("status", "unknown"))] += 1
+    document = {
+        "attempted": len(index_rows),
+        "completed": int(counts.get("completed", 0)),
+        "failed": int(counts.get("failed", 0)),
+        "running_or_other": int(len(index_rows) - counts.get("completed", 0) - counts.get("failed", 0)),
+        "completion_rate": (float(counts.get("completed", 0) / len(index_rows)) if index_rows else 0.0),
+        "status_counts": dict(counts),
+        "failure_reasons": dict(failures),
+        "by_method": {key: dict(value) for key, value in sorted(by_method.items())},
+        "by_scenario": {key: dict(value) for key, value in sorted(by_scenario.items())},
+    }
+    (output / "batch_status.json").write_text(
+        json.dumps(document, ensure_ascii=False, indent=2), encoding="utf-8")
+    return document
+
+
 def aggregate(index_rows: list[dict], output: Path) -> list[dict]:
-    """Create paper-ready mean/std/95%-CI summaries from completed Monte Carlo runs."""
+    """Create paper-ready summaries while keeping failed runs visible separately."""
+    _write_batch_status(index_rows, output)
     metric_rows = []
     for row in index_rows:
         if row.get("status") != "completed":
@@ -135,6 +164,7 @@ def run_batch(scenarios: Iterable[str | Path], methods=DEFAULT_METHODS, seeds=ra
                        "config": str(scenario_path), "status": "running", "run_dir": ""}
                 index.append(row)
                 _write_table(root / "index.csv", index)
+                _write_batch_status(index, root)
                 try:
                     run_dir = run_research_simulation(base_cfg, method=str(method), output=root / "runs", seed=int(seed))
                     row["run_dir"] = str(Path(run_dir).resolve())
@@ -144,8 +174,10 @@ def run_batch(scenarios: Iterable[str | Path], methods=DEFAULT_METHODS, seeds=ra
                     row["error"] = f"{type(exc).__name__}: {exc}"
                     if not continue_on_error:
                         _write_table(root / "index.csv", index)
+                        _write_batch_status(index, root)
                         raise
                 _write_table(root / "index.csv", index)
+                _write_batch_status(index, root)
     aggregate(index, root)
     return root
 
