@@ -71,14 +71,29 @@ class SolverDiagnostics:
     status: str = "not_run"
     solve_ms: float = 0.0
     mip_gap: float | None = None
+    # Backward-compatible primary columns used by research_solver.csv:
+    # level1 = target visibility loss [s]
+    # level2 = normalized persistent-search utility
+    # level3 = execution cost
     level1: float | None = None
     level2: float | None = None
     level3: float | None = None
+    # Explicit names avoid hiding the additional handover-overlap lexicographic
+    # level. These values are also copied to extras_json by as_dict().
+    overlap_shortfall: float | None = None
+    search_utility: float | None = None
+    execution_cost: float | None = None
     candidate_count: int = 0
     timeout: bool = False
     extras: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
+        extras = dict(self.extras)
+        extras.update({
+            "overlap_shortfall": None if self.overlap_shortfall is None else float(self.overlap_shortfall),
+            "search_utility": None if self.search_utility is None else float(self.search_utility),
+            "execution_cost": None if self.execution_cost is None else float(self.execution_cost),
+        })
         return {
             "method": self.method,
             "status": self.status,
@@ -89,5 +104,5 @@ class SolverDiagnostics:
             "level3": None if self.level3 is None else float(self.level3),
             "candidate_count": int(self.candidate_count),
             "timeout": bool(self.timeout),
-            "extras": self.extras,
+            "extras": extras,
         }
