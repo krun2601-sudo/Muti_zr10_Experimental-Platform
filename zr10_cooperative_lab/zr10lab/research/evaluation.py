@@ -29,6 +29,12 @@ class ResearchEvaluator:
     stochastic detector happened to fire on that frame. Detection/coasting remains
     available in tracks.csv, while the loss quantities here correspond exactly to
     the paper's continuous-monitoring requirement.
+
+    The evaluator can also receive one-step *anonymous* safety predictions from a
+    planner. At the due time it resolves anonymous track IDs only inside this
+    private evaluation layer and checks whether the target is actually geometrically
+    visible. This yields an empirical risk-violation rate without leaking truth to
+    the policy.
     """
 
     def __init__(self):
@@ -42,12 +48,42 @@ class ResearchEvaluator:
         self.handover_without_overlap = 0
         self.handover_overlap_durations: list[float] = []
         self._handover_events: list[dict[str, Any]] = []
+        self._pending_risk_prediction: tuple[float, tuple[str, ...]] | None = None
+        self.risk_prediction_trials = 0
+        self.risk_prediction_violations = 0
         self._last_t: float | None = None
         self.search_age_integral = 0.0
         self.elapsed_integral_s = 0.0
 
+    def register_risk_prediction(self, due_t: float, track_ids) -> None:
+        """Replace the active one-step safety forecast with the newest plan.
+
+        Event-triggered replanning intentionally invalidates an older not-yet-due
+        forecast because its action plan is no longer being executed.
+        """
+        self._pending_risk_prediction = (
+            float(due_t), tuple(sorted({str(x) for x in track_ids if str(x)})))
+
+    def _evaluate_due_risk_prediction(self, t: float, target_status) -> None:
+        pending = self._pending_risk_prediction
+        if pending is None or float(t) + 1e-9 < pending[0]:
+            return
+        _, track_ids = pending
+        by_track = {status.track_id: status for status in target_status if status.track_id}
+        for track_id in track_ids:
+            status = by_track.get(track_id)
+            # A target that exited the ROI before the forecast due time is not a
+            # safety violation; the monitoring obligation no longer exists.
+            if status is None or not status.active:
+                continue
+            self.risk_prediction_trials += 1
+            if not status.visible_devices:
+                self.risk_prediction_violations += 1
+        self._pending_risk_prediction = None
+
     def update(self, t: float, dt: float, target_status, search_snapshot) -> dict[str, float | int | None]:
         dt = max(0.0, float(dt))
+        self._evaluate_due_risk_prediction(float(t), target_status)
         active_ids = set()
         for status in target_status:
             active_ids.add(status.truth_id)
@@ -126,8 +162,6 @@ class ResearchEvaluator:
             state.previous_visible = visible
             state.previous_devices = visible_devices
 
-        # Retired targets keep their accumulated metrics. Active status is not needed
-        # after exit, so no hidden truth-derived values enter algorithm inputs.
         if search_snapshot is not None:
             self.search_age_integral += float(np.mean(search_snapshot.ages_s)) * dt
             self.elapsed_integral_s += dt
@@ -164,6 +198,8 @@ class ResearchEvaluator:
         max_loss = max((s.max_loss_s for s in discovered), default=0.0)
         loss_episodes = sum(s.loss_episodes for s in discovered)
         handover_total = self.handover_success + self.handover_without_overlap
+        risk_rate = (self.risk_prediction_violations / self.risk_prediction_trials
+                     if self.risk_prediction_trials else None)
         return {
             "research_entered_target_count": len(self.entered_ids),
             "research_discovered_target_count": len(discovered),
@@ -178,6 +214,9 @@ class ResearchEvaluator:
             "research_handover_no_overlap_count": int(self.handover_without_overlap),
             "research_handover_success_rate": self.handover_success / handover_total if handover_total else None,
             "research_handover_overlap_mean_s": float(np.mean(self.handover_overlap_durations)) if self.handover_overlap_durations else None,
+            "research_risk_prediction_trials": int(self.risk_prediction_trials),
+            "research_risk_prediction_violations": int(self.risk_prediction_violations),
+            "research_empirical_risk_violation_rate": risk_rate,
             "research_search_age_integral": float(self.search_age_integral),
             "research_active_target_count": len(active_ids or ()),
         }
