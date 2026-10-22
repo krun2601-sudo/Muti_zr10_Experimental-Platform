@@ -1,0 +1,6 @@
+extends: ../scenarios/S6_contention.yaml
+policy:
+  research:
+    scenario: {id: A1-no-uncertainty}
+    planning:
+      use_uncertainty: false
