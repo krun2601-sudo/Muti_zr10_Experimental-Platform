@@ -1,0 +1,110 @@
+schema_version: 1
+study: persistent_search_continuous_monitoring
+base_config: search_monitor_base.yaml
+
+# Splits are frozen before full Monte Carlo results are generated.
+splits:
+  train_learning_only:
+    scenarios:
+      - scenarios/S1_single.yaml
+      - scenarios/S2_staggered.yaml
+      - scenarios/S3_crossing.yaml
+      - scenarios/S5_cluster_split.yaml
+      - scenarios/S6_contention.yaml
+    seeds: [1001,1002,1003,1004,1005,1006,1007,1008,1009,1010,1011,1012,1013,1014,1015,1016,1017,1018,1019,1020]
+  validation_only:
+    scenarios:
+      - scenarios/S4_boundary_handoff.yaml
+      - scenarios/S8_maneuver.yaml
+    seeds: [2001,2002,2003,2004,2005]
+  test_main:
+    scenarios:
+      - scenarios/S0_no_target.yaml
+      - scenarios/S10_heldout_mixed.yaml
+      - scenarios/S11_heldout_handoff_contention.yaml
+      - scenarios/S7_overload.yaml
+    seeds: [3001,3002,3003,3004,3005,3006,3007,3008,3009,3010,3011,3012,3013,3014,3015,3016,3017,3018,3019,3020]
+  test_ood:
+    scenarios:
+      - scenarios/S9a_ood_fast.yaml
+      - scenarios/S9b_ood_delay_noise.yaml
+    seeds: [4001,4002,4003,4004,4005,4006,4007,4008,4009,4010,4011,4012,4013,4014,4015,4016,4017,4018,4019,4020]
+
+methods:
+  primary:
+    - fixed_scan
+    - greedy
+    - weighted_rh
+    - classical_ptz
+    - info_planner
+    - ssm_belief
+    - ecprh
+  learning_optional_after_training:
+    - mappo
+    - safe_mappo
+
+baseline_tuning:
+  weighted_rh:
+    split: validation_only
+    selection: pareto_nearest_normalized_ideal
+    weights:
+      loss: [1.0,3.0,10.0,30.0,100.0]
+      overlap: [1.0,3.0,10.0]
+      search: [0.3,1.0,3.0]
+      motion: [0.0,0.03,0.1]
+  mappo:
+    train_split: train_learning_only
+    model_selection_split: validation_only
+    test_splits: [test_main, test_ood]
+
+ablations:
+  - {id: no_uncertainty, config: ablations/no_uncertainty.yaml}
+  - {id: no_overlap, config: ablations/no_overlap.yaml}
+  - {id: fixed_zoom, config: ablations/fixed_zoom.yaml}
+  - {id: short_horizon, config: ablations/short_horizon.yaml}
+  - {id: no_event_replan, config: ablations/no_event_replan.yaml}
+
+sensitivity:
+  visibility_risk: [0.01,0.025,0.05,0.10,0.20]
+  horizon_s: [1.0,2.0,3.0,4.0,5.0]
+  replan_period_s: [0.25,0.5,1.0]
+  settle_s: [0.10,0.25,0.50]
+  detection_probability: [0.80,0.90,0.96,1.00]
+  position_noise_std_m: [0.25,0.5,1.0,2.0,4.0]
+
+metrics:
+  primary:
+    - {name: research_total_loss_s, direction: minimize}
+    - {name: research_max_loss_gap_s, direction: minimize}
+    - {name: research_detection_delay_p95_s, direction: minimize}
+    - {name: research_revisit_age_p95_s, direction: minimize}
+  secondary:
+    - {name: research_monitor_visible_ratio, direction: maximize}
+    - {name: research_discovery_rate, direction: maximize}
+    - {name: research_handover_success_rate, direction: maximize}
+    - {name: research_handover_overlap_mean_s, direction: report}
+    - {name: research_search_age_integral, direction: minimize}
+    - {name: research_empirical_risk_violation_rate, direction: minimize}
+    - {name: research_sensing_duty_cycle, direction: maximize}
+    - {name: research_total_yaw_motion_deg, direction: minimize}
+    - {name: research_total_pitch_motion_deg, direction: minimize}
+    - {name: research_total_zoom_change, direction: minimize}
+    - {name: research_assignment_switch_count, direction: minimize}
+    - {name: solver_p95_ms, direction: minimize}
+    - {name: solver_timeout_rate, direction: minimize}
+
+statistics:
+  pairing: scenario_and_seed
+  confidence_level: 0.95
+  bootstrap_samples: 10000
+  paired_test: wilcoxon_signed_rank
+  multiple_comparison_correction: holm
+  reference_method: ecprh
+  report_effects: [paired_mean_delta, paired_median_delta, win_rate, wilcoxon_p, holm_adjusted_p]
+
+rules:
+  - Never tune hyperparameters on test_main or test_ood.
+  - Use identical scenario, seed, information and actuator constraints across methods.
+  - Do not weaken a baseline by reducing its action space or prediction information.
+  - A failed or timed-out run remains in the experiment index and is not silently discarded.
+  - Numerical results support or contradict predicted trends; they do not prove a theorem.
