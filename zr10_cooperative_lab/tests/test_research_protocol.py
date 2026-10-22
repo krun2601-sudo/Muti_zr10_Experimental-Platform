@@ -102,7 +102,6 @@ def test_mappo_cost_penalizes_active_but_undiscovered_target():
     assert obs.shape[0] == len(cfg.active_devices)
     assert cost > 0.0
     assert info["reward_uses_privileged_truth"] is True
-    # Hidden truth is supervision only; no truth-id field exists in the numeric actor observation.
     assert np.isfinite(obs).all()
 
 
@@ -113,4 +112,14 @@ def test_test_split_refuses_parameterized_baseline_without_validation_selection(
             "test_main", tmp_path,
             methods=["weighted_rh"], paired=False,
             baseline_selection_dir=None,
+        )
+
+
+def test_test_split_refuses_learning_method_without_validation_checkpoint(tmp_path):
+    with pytest.raises(ValueError, match="validation-selected checkpoints"):
+        run_split(
+            "configs/research/paper_experiment_manifest.yaml",
+            "test_main", tmp_path,
+            methods=["mappo"], paired=False,
+            learning_selection_dir=None,
         )
