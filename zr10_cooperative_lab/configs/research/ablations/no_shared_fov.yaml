@@ -1,0 +1,8 @@
+extends: ../search_monitor_base.yaml
+
+# Disable multi-target shared-view primitives while leaving the rest of ECP-RH
+# unchanged. Single-target tracking candidates remain available.
+policy:
+  research:
+    planning:
+      max_shared_targets: 1
