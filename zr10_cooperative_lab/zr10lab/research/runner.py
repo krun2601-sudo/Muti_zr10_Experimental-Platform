@@ -28,6 +28,12 @@ def _policy(method: str, cfg):
     # ResearchExperiment is the single authoritative cadence controller for every
     # method. Keeping cadence outside policies guarantees identical periodic/event
     # decision opportunities in GUI, batch and headless execution.
+    if method == "ecprh":
+        from .priority_policies import PriorityECPRHPolicy
+        return PriorityECPRHPolicy(cfg)
+    if method == "weighted_rh":
+        from .priority_policies import PriorityWeightedRHPolicy
+        return PriorityWeightedRHPolicy(cfg)
     if method in ("mappo", "safe_mappo"):
         from .mappo import MAPPOPolicy, SafeMAPPOPolicy
         return MAPPOPolicy(cfg) if method == "mappo" else SafeMAPPOPolicy(cfg)
