@@ -34,6 +34,9 @@ def _policy(method: str, cfg):
     if method == "weighted_rh":
         from .priority_policies import PriorityWeightedRHPolicy
         return PriorityWeightedRHPolicy(cfg)
+    if method == "greedy":
+        from .strong_baselines import ExecutionAwareMyopicGreedyPolicy
+        return ExecutionAwareMyopicGreedyPolicy(cfg)
     if method in ("mappo", "safe_mappo"):
         from .mappo import MAPPOPolicy, SafeMAPPOPolicy
         return MAPPOPolicy(cfg) if method == "mappo" else SafeMAPPOPolicy(cfg)
