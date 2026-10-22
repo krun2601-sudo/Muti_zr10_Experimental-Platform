@@ -1,5 +1,5 @@
 # Persistent-search / continuous-monitoring paper configuration.
-# All targets/perception are virtual.  In mirror mode physical ZR10 units only
+# All targets/perception are virtual. In mirror mode physical ZR10 units only
 # execute the same A/E/Zoom commands; they do not provide target detections.
 extends: ../control_center.yaml
 
@@ -47,22 +47,27 @@ policy:
     planning:
       horizon_s: 3.0
       slot_s: 0.5
-      # Control/visualization remains 10 Hz, while expensive scheduling is 2 Hz.
+      # Device/world dynamics remain 10 Hz; all research methods normally decide
+      # at 2 Hz, with the same discrete task-event early-replanning opportunities.
       replan_period_s: 0.5
+      event_replan: true
       solver_time_limit_s: 0.12
       solver_mip_rel_gap: 0.001
       search_candidates_per_device: 8
       max_shared_targets: 3
       prediction_process_noise_m2ps: 0.5
       visibility_risk: 0.05
+      use_uncertainty: true
       inter_sample_motion_factor: 0.5
       fov_margin_deg: 0.25
+      # Desired source/destination overlap. The optimizer models overlap with a
+      # bounded satisfaction variable instead of a hard infeasible constraint.
       handover_overlap_s: 0.5
       search_zoom_levels: [1.0, 2.0]
       tracking_zoom_levels: [2.0, 4.0, 6.0, 8.0]
       action_ttl_s: 0.8
     baselines:
-      weighted_rh: {loss_weight: 10.0, search_weight: 1.0, motion_weight: 0.1}
+      weighted_rh: {loss_weight: 10.0, overlap_weight: 3.0, search_weight: 1.0, motion_weight: 0.1}
       greedy: {target_value: 100.0, search_value: 1.0, motion_cost: 0.1}
       classical_ptz: {track_weight: 4.0, search_weight: 1.0, risk_weight: 2.0, motion_weight: 0.15}
       info_planner: {track_information_weight: 1.0, discovery_weight: 1.0, motion_weight: 0.05}
@@ -108,15 +113,15 @@ control_center:
   modes:
     - id: ecprh
       label: ECP-RH（本文方法）
-      description: 执行约束、连续可见优先的滚动时域调度。
-      policy: zr10lab.research.realtime_policies:RealtimeECPRHPolicy
+      description: 执行约束、连续可见优先、软交接缺口的事件触发滚动时域调度。
+      policy: zr10lab.research.priority_policies:PriorityECPRHPolicy
       requires_detection: false
       requires_calibration: false
       settings: {mission: search_monitor}
     - id: weighted_rh
       label: Weighted RH-MPC
-      description: 与本文方法共享预测和候选原语、相同重规划周期的加权滚动时域基线。
-      policy: zr10lab.research.realtime_policies:RealtimeWeightedRHPolicy
+      description: 与本文方法共享预测、候选原语、软交接变量与决策机会的有限权重基线。
+      policy: zr10lab.research.priority_policies:PriorityWeightedRHPolicy
       requires_detection: false
       requires_calibration: false
       settings: {mission: search_monitor}
