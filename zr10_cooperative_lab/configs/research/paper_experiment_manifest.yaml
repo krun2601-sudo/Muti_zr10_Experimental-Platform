@@ -31,27 +31,46 @@ splits:
     seeds: [4001,4002,4003,4004,4005,4006,4007,4008,4009,4010,4011,4012,4013,4014,4015,4016,4017,4018,4019,4020]
 
 methods:
-  primary:
-    - fixed_scan
-    - greedy
-    - weighted_rh
-    - classical_ptz
-    - info_planner
-    - ssm_belief
-    - ecprh
-  learning_optional_after_training:
-    - mappo
-    - safe_mappo
+  primary: [fixed_scan, greedy, weighted_rh, classical_ptz, info_planner, ssm_belief, ecprh]
+  parameter_free_baselines: [fixed_scan, greedy]
+  parameterized_baselines: [weighted_rh, classical_ptz, info_planner, ssm_belief]
+  learning_optional_after_training: [mappo, safe_mappo]
 
+# Every parameterized non-learning baseline uses the same validation split and the
+# same selection rule implemented by baseline_tuning.py. No test result is allowed
+# to influence these parameters.
 baseline_tuning:
   weighted_rh:
     split: validation_only
-    selection: pareto_nearest_normalized_ideal
-    weights:
-      loss: [1.0,3.0,10.0,30.0,100.0]
-      overlap: [1.0,3.0,10.0]
-      search: [0.3,1.0,3.0]
-      motion: [0.0,0.03,0.1]
+    selection: lexicographic_task_metrics
+    grid:
+      loss_weight: [3.0,10.0,30.0,100.0]
+      overlap_weight: [1.0,3.0,10.0]
+      search_weight: [0.3,1.0,3.0]
+      motion_weight: [0.0,0.03,0.1]
+  classical_ptz:
+    split: validation_only
+    selection: lexicographic_task_metrics
+    grid:
+      track_weight: [2.0,4.0,8.0]
+      search_weight: [0.5,1.0,2.0]
+      risk_weight: [1.0,2.0,4.0]
+      motion_weight: [0.05,0.15]
+  info_planner:
+    split: validation_only
+    selection: lexicographic_task_metrics
+    grid:
+      track_information_weight: [0.5,1.0,2.0]
+      discovery_weight: [0.5,1.0,2.0]
+      motion_weight: [0.02,0.05,0.1]
+  ssm_belief:
+    split: validation_only
+    selection: lexicographic_task_metrics
+    grid:
+      gamma: [0.85,0.92,0.98]
+      monitor_weight: [2.0,4.0,8.0]
+      search_weight: [0.5,1.0,2.0]
+      motion_weight: [0.04,0.08]
   mappo:
     train_split: train_learning_only
     model_selection_split: validation_only
@@ -92,6 +111,8 @@ metrics:
     - {name: research_total_pitch_motion_deg, direction: minimize}
     - {name: research_total_zoom_change, direction: minimize}
     - {name: research_assignment_switch_count, direction: minimize}
+    - {name: research_event_replan_count, direction: report}
+    - {name: research_replan_frequency_hz, direction: report}
     - {name: solve_ms_p95, direction: minimize}
     - {name: solver_timeout_rate, direction: minimize}
 
@@ -108,5 +129,6 @@ rules:
   - Never tune hyperparameters on test_main or test_ood.
   - Use identical scenario, seed, information and actuator constraints across methods.
   - Do not weaken a baseline by reducing its action space or prediction information.
+  - Parameterized baselines must freeze their validation-selected JSON before any test split is run.
   - A failed or timed-out run remains in the experiment index and is not silently discarded.
   - Numerical results support or contradict predicted trends; they do not prove a theorem.
