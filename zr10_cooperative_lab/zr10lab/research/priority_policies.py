@@ -5,6 +5,17 @@ from .optimization import PriorityHorizonMILP
 from .policies import ECPRHPolicy, WeightedRHPolicy
 
 
+def _guaranteed_targets_h1(ps, selected) -> list[str]:
+    """Anonymous targets predicted safely visible in the first future slot."""
+    if ps.horizon_steps <= 0:
+        return []
+    result = []
+    for j, track_id in enumerate(ps.target_ids):
+        if any(bool(p.visibility[j, 0]) for p in selected):
+            result.append(track_id)
+    return result
+
+
 class PriorityECPRHPolicy(ECPRHPolicy):
     """ECP-RH implementation using the always-feasible soft-overlap MILP."""
 
@@ -19,8 +30,12 @@ class PriorityECPRHPolicy(ECPRHPolicy):
         actions = (self._actions(context, selected, "ecprh") if selected
                    else self._holds(context, "ecprh_solver_fallback"))
         return Decision(actions, self._diag(
-            "ecprh", diag, target_count=len(ps.target_ids),
-            overlap_requirements=len(ps.overlap_requirements)))
+            "ecprh", diag,
+            target_count=len(ps.target_ids),
+            overlap_requirements=len(ps.overlap_requirements),
+            guaranteed_targets_h1=_guaranteed_targets_h1(ps, selected),
+            risk_check_delay_s=float(ps.slot_s),
+        ))
 
 
 class PriorityWeightedRHPolicy(WeightedRHPolicy):
@@ -47,4 +62,5 @@ class PriorityWeightedRHPolicy(WeightedRHPolicy):
         return Decision(actions, self._diag("weighted_rh", diag, weights={
             "loss": self.loss_weight, "overlap": self.overlap_weight,
             "search": self.search_weight, "motion": self.motion_weight,
-        }))
+        }, guaranteed_targets_h1=_guaranteed_targets_h1(ps, selected),
+            risk_check_delay_s=float(ps.slot_s)))
