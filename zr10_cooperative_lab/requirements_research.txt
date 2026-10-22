@@ -1,0 +1,3 @@
+# Optional dependencies for learned comparison methods only.
+# Core ECP-RH/model-based experiments use requirements.txt and SciPy/HiGHS.
+torch>=2.1,<3
