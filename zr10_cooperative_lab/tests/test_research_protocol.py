@@ -3,10 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 import yaml
 
 from zr10lab.config import load_config
 from zr10lab.research.priority_policies import _ConfigurableExecutionFactory
+from zr10lab.research.protocol import run_split
 from zr10lab.research.rl_env import ResearchMARLEnv
 from zr10lab.research.scalability import benchmark_case
 from zr10lab.research.studies import _explicit_yaml_override, apply_override
@@ -50,7 +52,6 @@ def test_no_execution_model_only_changes_planner_assumption():
     assert factory.use_execution_model is False
     assert factory._transition_s(state, device, state.yaw_deg + 20.0,
                                  state.pitch_deg, state.zoom) == 0.0
-    # Physical virtual-device dynamics are intentionally unchanged.
     assert device.max_slew_dps == cfg.active_devices[0].max_slew_dps
     assert ablated.policy["research"]["execution"]["settle_s"] == cfg.policy["research"]["execution"]["settle_s"]
 
@@ -70,8 +71,6 @@ def test_mappo_training_env_returns_early_on_shared_replan_event():
     cfg.policy["research"]["planning"]["replan_period_s"] = 0.5
     cfg.policy["research"]["planning"]["event_replan"] = True
     device_id = cfg.active_devices[0].id
-    # Deterministic connection edge at t=0.2 creates a task event independent of
-    # target detection luck or initial camera pointing.
     cfg.simulation["outages"] = [{"device_id": device_id, "start_s": 0.2, "end_s": 1.5}]
     env = ResearchMARLEnv(cfg, seed=5)
     obs, _ = env.reset(seed=5)
@@ -81,4 +80,14 @@ def test_mappo_training_env_returns_early_on_shared_replan_event():
     assert done is False
     assert info["event_triggered"] is True
     assert info["frames_executed"] == 2
-    assert info["time_s"] == 0.2
+    assert info["time_s"] == pytest.approx(0.2)
+
+
+def test_test_split_refuses_parameterized_baseline_without_validation_selection(tmp_path):
+    with pytest.raises(ValueError, match="frozen validation selections"):
+        run_split(
+            "configs/research/paper_experiment_manifest.yaml",
+            "test_main", tmp_path,
+            methods=["weighted_rh"], paired=False,
+            baseline_selection_dir=None,
+        )
