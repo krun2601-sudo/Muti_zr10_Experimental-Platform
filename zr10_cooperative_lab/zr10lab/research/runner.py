@@ -9,6 +9,7 @@ from ..recording import CSVRecorder
 from ..simulation import SimulationWorld
 from .mission import SearchMonitorMission
 from .policies import build_research_policy
+from .realtime_policies import RealtimeECPRHPolicy, RealtimeWeightedRHPolicy
 from .runtime import ResearchExperiment
 
 
@@ -23,11 +24,20 @@ def prepare_research_config(cfg, method: str, seed: int | None = None):
     return local
 
 
+def _policy(method: str, cfg):
+    # RH methods share the same lower replanning rate in both GUI and batch runs.
+    if method == "ecprh":
+        return RealtimeECPRHPolicy(cfg)
+    if method == "weighted_rh":
+        return RealtimeWeightedRHPolicy(cfg)
+    return build_research_policy(method, cfg)
+
+
 def run_research_simulation(cfg, method="ecprh", output=None, seed=None,
                             realtime=False, progress=None):
     """Run the paper task without physical hardware.
 
-    The virtual SimulationWorld is used only for PTZ execution.  SearchMonitorMission
+    The virtual SimulationWorld is used only for PTZ execution. SearchMonitorMission
     owns target truth/perception/evaluation, preserving the exact same task semantics
     later used by the hardware-mirror control center.
     """
@@ -37,7 +47,7 @@ def run_research_simulation(cfg, method="ecprh", output=None, seed=None,
         world.reset(seed=int(seed))
     mission = SearchMonitorMission(cfg)
     recorder = CSVRecorder(output or cfg.logging.get("root", "runs"), cfg.to_dict(), "sim")
-    policy = build_research_policy(method, cfg)
+    policy = _policy(method, cfg)
     experiment = ResearchExperiment(cfg, recorder, mission, policy=policy)
     dt = 1.0 / float(cfg.system.get("rate_hz", 10))
     steps = int(round(float(cfg.system.get("duration_s", 60)) / dt))
@@ -56,8 +66,6 @@ def run_research_simulation(cfg, method="ecprh", output=None, seed=None,
         completed = True
     finally:
         recorder.close(completed)
-    # Lightweight run descriptor outside CSV so batch tools do not need to parse
-    # the full metadata document merely to index experiments.
     (Path(recorder.path) / "research_run.json").write_text(json.dumps({
         "method": method,
         "seed": int(seed if seed is not None else cfg.simulation.get("seed", 7)),
