@@ -1,0 +1,36 @@
+extends: ../search_monitor_base.yaml
+system: {duration_s: 90}
+policy:
+  research:
+    scenario:
+      id: S11-heldout-handoff-contention
+      roi: {x: [100,160], y: [-50,50], z: [35,85]}
+      remove_outside_roi: true
+      targets:
+        - id: private_target_1
+          start_s: 6
+          end_s: 82
+          trajectory: waypoint
+          waypoints:
+            - {t_s: 6, position_m: [100,-48,52]}
+            - {t_s: 32, position_m: [123,-8,57]}
+            - {t_s: 58, position_m: [145,34,62]}
+            - {t_s: 82, position_m: [159,48,66]}
+        - id: private_target_2
+          start_s: 10
+          end_s: 80
+          trajectory: waypoint
+          waypoints:
+            - {t_s: 10, position_m: [101,46,68]}
+            - {t_s: 36, position_m: [126,12,65]}
+            - {t_s: 60, position_m: [146,-30,62]}
+            - {t_s: 80, position_m: [159,-47,60]}
+        - id: private_target_3
+          start_s: 24
+          end_s: 88
+          trajectory: sin
+          position_m: [104,0,78]
+          velocity_mps: [1.0,0.0,-0.08]
+          amplitude_m: [0,18,3]
+          period_s: 22
+          phase_rad: [0,1.0,0.3]
