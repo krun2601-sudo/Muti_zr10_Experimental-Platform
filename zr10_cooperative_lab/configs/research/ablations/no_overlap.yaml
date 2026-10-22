@@ -1,0 +1,6 @@
+extends: ../scenarios/S4_boundary_handoff.yaml
+policy:
+  research:
+    scenario: {id: A2-no-overlap}
+    planning:
+      handover_overlap_s: 0.0
