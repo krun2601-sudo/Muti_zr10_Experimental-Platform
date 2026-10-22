@@ -9,7 +9,7 @@ from ..recording import CSVRecorder
 from ..simulation import SimulationWorld
 from .mission import SearchMonitorMission
 from .policies import build_research_policy
-from .realtime_policies import RealtimeECPRHPolicy, RealtimeWeightedRHPolicy
+from .provenance import write_research_provenance
 from .runtime import ResearchExperiment
 
 
@@ -25,11 +25,12 @@ def prepare_research_config(cfg, method: str, seed: int | None = None):
 
 
 def _policy(method: str, cfg):
-    # RH methods share the same lower replanning rate in both GUI and batch runs.
-    if method == "ecprh":
-        return RealtimeECPRHPolicy(cfg)
-    if method == "weighted_rh":
-        return RealtimeWeightedRHPolicy(cfg)
+    # ResearchExperiment is the single authoritative cadence controller for every
+    # method. Keeping cadence outside policies guarantees identical periodic/event
+    # decision opportunities in GUI, batch and headless execution.
+    if method in ("mappo", "safe_mappo"):
+        from .mappo import MAPPOPolicy, SafeMAPPOPolicy
+        return MAPPOPolicy(cfg) if method == "mappo" else SafeMAPPOPolicy(cfg)
     return build_research_policy(method, cfg)
 
 
@@ -66,10 +67,15 @@ def run_research_simulation(cfg, method="ecprh", output=None, seed=None,
         completed = True
     finally:
         recorder.close(completed)
+    run_seed = int(seed if seed is not None else cfg.simulation.get("seed", 7))
     (Path(recorder.path) / "research_run.json").write_text(json.dumps({
         "method": method,
-        "seed": int(seed if seed is not None else cfg.simulation.get("seed", 7)),
+        "seed": run_seed,
         "mission": "search_monitor",
         "completed": completed,
     }, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_research_provenance(recorder.path, cfg=cfg, extra={
+        "run_method": str(method), "run_seed": run_seed,
+        "environment": "sim", "completed": bool(completed),
+    })
     return recorder.path
