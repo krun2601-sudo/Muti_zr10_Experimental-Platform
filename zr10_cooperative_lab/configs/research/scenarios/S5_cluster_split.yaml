@@ -1,0 +1,36 @@
+extends: ../search_monitor_base.yaml
+system: {duration_s: 80}
+policy:
+  research:
+    scenario:
+      id: S5-cluster-split
+      roi: {x: [100,160], y: [-50,50], z: [35,85]}
+      remove_outside_roi: true
+      targets:
+        - id: private_target_1
+          start_s: 8
+          end_s: 80
+          trajectory: waypoint
+          waypoints:
+            - {t_s: 8, position_m: [102,-12,58]}
+            - {t_s: 30, position_m: [126,-2,62]}
+            - {t_s: 55, position_m: [151,-40,73]}
+            - {t_s: 78, position_m: [158,-48,80]}
+        - id: private_target_2
+          start_s: 10
+          end_s: 80
+          trajectory: waypoint
+          waypoints:
+            - {t_s: 10, position_m: [103,-9,60]}
+            - {t_s: 30, position_m: [127,0,63]}
+            - {t_s: 55, position_m: [148,30,67]}
+            - {t_s: 78, position_m: [158,46,74]}
+        - id: private_target_3
+          start_s: 12
+          end_s: 80
+          trajectory: waypoint
+          waypoints:
+            - {t_s: 12, position_m: [104,-6,62]}
+            - {t_s: 30, position_m: [128,2,64]}
+            - {t_s: 55, position_m: [138,7,82]}
+            - {t_s: 78, position_m: [157,12,84]}
