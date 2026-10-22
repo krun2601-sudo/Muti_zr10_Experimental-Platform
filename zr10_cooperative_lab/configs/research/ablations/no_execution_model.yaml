@@ -1,0 +1,9 @@
+extends: ../search_monitor_base.yaml
+
+# Physical SimulationWorld and ReadinessTracker remain unchanged. Only the
+# planner falsely assumes candidate moves are instantaneous, isolating the value
+# of execution-aware prediction.
+policy:
+  research:
+    planning:
+      use_execution_model: false
