@@ -22,8 +22,8 @@ class MissionStep:
 class SearchMonitorMission:
     """Authoritative virtual task layer for the paper experiments.
 
-    The mission owns private target truth and evaluation.  Algorithms only see
-    anonymous target beliefs and the policy_payload.  It can therefore be used
+    The mission owns private target truth and evaluation. Algorithms only see
+    anonymous target beliefs and the policy_payload. It can therefore be used
     identically in pure simulation and in the hardware-mirror environment.
     """
 
@@ -99,10 +99,16 @@ class SearchMonitorMission:
         )
 
     def record(self, recorder, t: float) -> None:
-        """Write evaluation-only research tables. Safe to call once per cycle."""
+        """Write evaluation-only research tables. Safe to call once per cycle.
+
+        ``research_targets`` uses geometric continuous-visibility loss gaps from
+        ResearchEvaluator. Detector misses/coasting remain represented separately
+        in ``tracks.csv`` and ``sensing_devices_json``.
+        """
         if recorder is None or self.last_perception is None or self.last_search is None:
             return
         for status in self.last_perception.target_status:
+            monitor = self.evaluator.target_snapshot(status.truth_id)
             recorder.write(
                 "research_targets", t,
                 truth_id=status.truth_id,
@@ -112,8 +118,8 @@ class SearchMonitorMission:
                 visible_devices_json=dumps(status.visible_devices),
                 sensing_devices_json=dumps(status.sensing_devices),
                 discovery_t=status.discovery_t,
-                current_loss_gap_s=status.current_loss_gap_s,
-                longest_loss_gap_s=status.longest_loss_gap_s,
+                current_loss_gap_s=monitor["current_loss_gap_s"],
+                longest_loss_gap_s=monitor["longest_loss_gap_s"],
             )
         snap = self.last_search
         recorder.write(
@@ -126,3 +132,5 @@ class SearchMonitorMission:
             ages_json=dumps(snap.ages_s),
             observed_json=dumps(snap.observed_now.astype(int)),
         )
+        for event in self.evaluator.drain_handover_events():
+            recorder.event("research_handover", event, t)
