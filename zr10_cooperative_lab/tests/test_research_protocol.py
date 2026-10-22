@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from zr10lab.config import load_config
-from zr10lab.research.priority_policies import _ConfigurableExecutionFactory
+from zr10lab.research.paper_policies import _RiskExecutionFactory
 from zr10lab.research.protocol import run_split
 from zr10lab.research.rl_env import ResearchMARLEnv
 from zr10lab.research.scalability import benchmark_case
@@ -48,7 +48,7 @@ def test_no_execution_model_only_changes_planner_assumption():
     world = SimulationWorld(ablated)
     state = world.states()[ablated.active_devices[0].id]
     device = ablated.active_devices[0]
-    factory = _ConfigurableExecutionFactory(ablated)
+    factory = _RiskExecutionFactory(ablated)
     assert factory.use_execution_model is False
     assert factory._transition_s(state, device, state.yaw_deg + 20.0,
                                  state.pitch_deg, state.zoom) == 0.0
@@ -81,6 +81,29 @@ def test_mappo_training_env_returns_early_on_shared_replan_event():
     assert info["event_triggered"] is True
     assert info["frames_executed"] == 2
     assert info["time_s"] == pytest.approx(0.2)
+
+
+def test_mappo_cost_penalizes_active_but_undiscovered_target():
+    cfg = load_config("configs/research/search_monitor_base.yaml")
+    cfg.system["duration_s"] = 0.6
+    cfg.policy["research"]["perception"]["detection_probability"] = 0.0
+    cfg.policy["research"]["scenario"]["targets"] = [{
+        "id": "hidden_training_target",
+        "start_s": 0.0,
+        "end_s": 0.6,
+        "trajectory": "cv",
+        "position_m": [130.0, 0.0, 60.0],
+        "velocity_mps": [0.0, 0.0, 0.0],
+    }]
+    env = ResearchMARLEnv(cfg, seed=7)
+    obs, _ = env.reset(seed=7)
+    action = np.zeros((len(cfg.active_devices), 3), dtype=float)
+    _, _, _, cost, _, info = env.step(action)
+    assert obs.shape[0] == len(cfg.active_devices)
+    assert cost > 0.0
+    assert info["reward_uses_privileged_truth"] is True
+    # Hidden truth is supervision only; no truth-id field exists in the numeric actor observation.
+    assert np.isfinite(obs).all()
 
 
 def test_test_split_refuses_parameterized_baseline_without_validation_selection(tmp_path):
