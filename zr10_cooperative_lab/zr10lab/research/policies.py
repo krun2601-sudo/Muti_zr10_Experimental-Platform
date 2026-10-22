@@ -8,7 +8,7 @@ import numpy as np
 
 from ..geometry import world_to_gimbal_angles
 from ..models import Action, Decision, PolicyContext
-from .planning import HorizonMILP, Primitive, PrimitiveFactory, angle_delta_deg
+from .planning import Primitive, PrimitiveFactory, angle_delta_deg
 from .types import SolverDiagnostics
 
 
@@ -59,7 +59,13 @@ class _ResearchPolicy:
 
 
 class ECPRHPolicy(_ResearchPolicy):
-    """Proposed execution-constrained priority receding-horizon scheduler."""
+    """Shared configuration/utility base for the proposed priority policy.
+
+    The executable ECP-RH implementation is ``PriorityECPRHPolicy`` in
+    :mod:`priority_policies`.  This base remains only to share validated solver
+    configuration and common action helpers; it must not instantiate the legacy
+    hard-overlap solver.
+    """
 
     def __init__(self, cfg):
         super().__init__(cfg)
@@ -68,19 +74,11 @@ class ECPRHPolicy(_ResearchPolicy):
         self.mip_gap = float(planning.get("solver_mip_rel_gap", 1e-4))
 
     def decide(self, context: PolicyContext) -> Decision:
-        self._check(context)
-        ps = self.factory.generate(context)
-        if not ps.flat:
-            return Decision(self._holds(context, "ecprh_no_candidate"), self._diag("ecprh", candidate_count=0))
-        solver = HorizonMILP(ps, self.time_limit_s, self.mip_gap)
-        selected, diag = solver.solve_lexicographic("ecprh")
-        actions = self._actions(context, selected, "ecprh") if selected else self._holds(context, "ecprh_solver_fallback")
-        return Decision(actions, self._diag("ecprh", diag,
-            target_count=len(ps.target_ids), overlap_constraints=len(ps.overlap_requirements)))
+        raise RuntimeError("use PriorityECPRHPolicy; legacy hard-overlap ECP-RH is disabled")
 
 
 class WeightedRHPolicy(_ResearchPolicy):
-    """Strong same-model weighted receding-horizon MPC baseline."""
+    """Shared configuration base for the same-model weighted RH baseline."""
 
     def __init__(self, cfg):
         super().__init__(cfg)
@@ -93,19 +91,11 @@ class WeightedRHPolicy(_ResearchPolicy):
         self.mip_gap = float(planning.get("solver_mip_rel_gap", 1e-4))
 
     def decide(self, context: PolicyContext) -> Decision:
-        self._check(context)
-        ps = self.factory.generate(context)
-        if not ps.flat:
-            return Decision(self._holds(context, "weighted_no_candidate"), self._diag("weighted_rh"))
-        solver = HorizonMILP(ps, self.time_limit_s, self.mip_gap)
-        selected, diag = solver.solve_weighted(self.loss_weight, self.search_weight, self.motion_weight)
-        actions = self._actions(context, selected, "weighted_rh") if selected else self._holds(context, "weighted_solver_fallback")
-        return Decision(actions, self._diag("weighted_rh", diag, weights={
-            "loss": self.loss_weight, "search": self.search_weight, "motion": self.motion_weight}))
+        raise RuntimeError("use PriorityWeightedRHPolicy; legacy hard-overlap weighted RH is disabled")
 
 
 class MyopicGreedyPolicy(_ResearchPolicy):
-    """One-step greedy baseline using the common executable primitive set."""
+    """Configuration base for the execution-aware one-step greedy baseline."""
 
     def __init__(self, cfg):
         super().__init__(cfg)
@@ -115,13 +105,13 @@ class MyopicGreedyPolicy(_ResearchPolicy):
         self.motion_cost = float(opt.get("motion_cost", 0.1))
 
     def decide(self, context: PolicyContext) -> Decision:
+        # Kept as a simple reference implementation, but build_research_policy()
+        # deliberately returns the stronger execution-aware subclass below.
         self._check(context)
         ps = self.factory.generate(context)
         covered_targets: set[int] = set()
         covered_cells: set[int] = set()
         selected = []
-        # Greedy intentionally values only the earliest planning slot.  Movement
-        # that pays off later therefore needs the proposed look-ahead method.
         h = 0
         device_order = sorted(ps.by_device, key=lambda key: len(ps.by_device[key]))
         for key in device_order:
@@ -137,8 +127,7 @@ class MyopicGreedyPolicy(_ResearchPolicy):
                 selected.append(best)
                 covered_targets |= {j for j in range(len(ps.target_ids)) if best.visibility[j, h]}
                 covered_cells |= {g for g in range(len(ps.search_positions)) if best.search_coverage[g, h]}
-        diag = SolverDiagnostics("greedy", status="heuristic", candidate_count=len(ps.flat),
-                                 extras={"covered_targets_h0": len(covered_targets), "covered_cells_h0": len(covered_cells)})
+        diag = SolverDiagnostics("greedy", status="legacy_myopic_reference", candidate_count=len(ps.flat))
         return Decision(self._actions(context, selected, "greedy"), self._diag("greedy", diag))
 
 
@@ -156,7 +145,6 @@ class FixedScanReactivePolicy(_ResearchPolicy):
         positions = np.asarray(search.get("positions_m", []), dtype=float)
         tracks = sorted(context.tracks, key=lambda t: t.track_id)
         available = {key for key, state in context.devices.items() if state.connected}
-        # Preserve target assignments while target exists and device remains usable.
         live_ids = {t.track_id for t in tracks}
         self.assignments = {tid: dev for tid, dev in self.assignments.items() if tid in live_ids and dev in available}
         used = set(self.assignments.values())
@@ -217,12 +205,7 @@ class FixedScanReactivePolicy(_ResearchPolicy):
 
 
 class ClassicalPTZPolicy(_ResearchPolicy):
-    """Adapted classical constrained PTZ utility baseline.
-
-    It is deliberately one-step/value-risk based: tracking quality is favored,
-    while remaining PTZ freedom is used opportunistically for search.  It is not
-    presented as the original authors' source-code reproduction.
-    """
+    """Adapted classical constrained PTZ utility baseline."""
 
     def __init__(self, cfg):
         super().__init__(cfg)
@@ -239,7 +222,6 @@ class ClassicalPTZPolicy(_ResearchPolicy):
         for key in sorted(ps.by_device):
             best, score_best = None, -math.inf
             for p in ps.by_device[key]:
-                # First executable sensing slot represents classical current-value planning.
                 h = min(max(p.ready_slot, 0), ps.horizon_steps - 1)
                 target_gain = sum(1.0 / (1.0 + target_counts[j]) for j in range(len(ps.target_ids)) if p.visibility[j, h])
                 cells = {g for g in range(len(ps.search_positions)) if p.search_coverage[g, h]}
@@ -306,12 +288,7 @@ class InformationPlannerPolicy(_ResearchPolicy):
 
 
 class SSMBeliefPolicy(_ResearchPolicy):
-    """Finite-candidate simultaneous-search/monitoring belief-lookahead baseline.
-
-    This is a documented adaptation of the SSM idea to fixed PTZ execution.  It
-    uses a discounted finite-horizon joint utility rather than claiming an exact
-    reproduction of a particular POMDP solver.
-    """
+    """Finite-candidate simultaneous-search/monitoring belief-lookahead baseline."""
 
     def __init__(self, cfg):
         super().__init__(cfg)
@@ -354,9 +331,6 @@ class SSMBeliefPolicy(_ResearchPolicy):
 
 
 POLICIES = {
-    "ecprh": ECPRHPolicy,
-    "weighted_rh": WeightedRHPolicy,
-    "greedy": MyopicGreedyPolicy,
     "fixed_scan": FixedScanReactivePolicy,
     "classical_ptz": ClassicalPTZPolicy,
     "info_planner": InformationPlannerPolicy,
@@ -365,7 +339,24 @@ POLICIES = {
 
 
 def build_research_policy(name: str, cfg):
+    """Build exactly the implementation used by the control-center mode.
+
+    Imports are intentionally local to avoid the circular dependency introduced by
+    the specialized policies subclassing the common configuration bases above.
+    This function is used by headless Monte Carlo, so keeping it synchronized with
+    ``configs/research/search_monitor_base.yaml`` is a reproducibility requirement.
+    """
+    if name == "ecprh":
+        from .priority_policies import PriorityECPRHPolicy
+        return PriorityECPRHPolicy(cfg)
+    if name == "weighted_rh":
+        from .priority_policies import PriorityWeightedRHPolicy
+        return PriorityWeightedRHPolicy(cfg)
+    if name == "greedy":
+        from .strong_baselines import ExecutionAwareMyopicGreedyPolicy
+        return ExecutionAwareMyopicGreedyPolicy(cfg)
     try:
         return POLICIES[name](cfg)
     except KeyError as exc:
-        raise ValueError(f"unknown research policy {name!r}; choose from {sorted(POLICIES)}") from exc
+        available = sorted([*POLICIES, "ecprh", "weighted_rh", "greedy"])
+        raise ValueError(f"unknown research policy {name!r}; choose from {available}") from exc
