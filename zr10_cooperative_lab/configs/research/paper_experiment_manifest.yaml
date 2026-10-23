@@ -3,9 +3,10 @@ study: persistent_search_continuous_monitoring
 base_config: search_monitor_base.yaml
 
 # Paper-test inputs are immutable identities resolved relative to this manifest.
-# Learning selections are intentionally absent until MAPPO has completed training
-# and validation-only model selection; therefore paper test cannot include MAPPO yet.
+# The global gate remains false until every required non-learning selection and
+# learning checkpoint replica has been frozen and hash-pinned after validation.
 frozen_inputs:
+  paper_test_unlocked: false
   baseline_selection_dir: frozen_baselines
   baseline_selection_sha256:
     weighted_rh: f9d2e1a68432478c3558d9b59e61b3bf27ec4fd85a9b27300c2a3ddf419fb8a3
@@ -156,7 +157,7 @@ rules:
   - Parameterized baselines must freeze their validation-selected JSON before any test split is run.
   - Paper-test selection directories must match frozen_inputs in this manifest; caller-supplied replacements are forbidden.
   - Frozen baseline selection files must match their manifest-pinned SHA-256 identities.
-  - Learning methods remain test-locked until a validation-selected checkpoint identity is committed to frozen_inputs.
+  - Keep paper_test_unlocked false until every required learning selection and checkpoint hash is frozen after validation.
   - Discovery failure must be reported explicitly; post-discovery loss cannot substitute for discovery performance.
   - A failed or timed-out run remains in the experiment index and is not silently discarded.
   - Numerical results support or contradict predicted trends; they do not prove a theorem.
