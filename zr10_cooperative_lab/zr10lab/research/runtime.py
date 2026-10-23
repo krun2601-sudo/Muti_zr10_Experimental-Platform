@@ -63,7 +63,8 @@ class ResearchExperiment(Experiment):
         self._last_replan_t = float(t)
 
     def _replan_metrics(self, t: float) -> dict[str, float | int]:
-        elapsed = max(0.0, float(t) - float(self._first_replan_t or t))
+        first_replan_t = self._first_replan_t if self._first_replan_t is not None else float(t)
+        elapsed = max(0.0, float(t) - float(first_replan_t))
         count = int(self._replan_counts["total"])
         # Exclude the first immediate plan from the empirical frequency numerator;
         # otherwise very short smoke tests report an artificial high rate.
