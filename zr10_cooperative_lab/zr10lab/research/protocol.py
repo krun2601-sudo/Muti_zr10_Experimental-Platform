@@ -33,6 +33,34 @@ def _resolve_scenarios(manifest_path: Path, rows):
     return result
 
 
+def _frozen_input_dir(manifest_path: Path, manifest: dict, key: str) -> Path | None:
+    value = manifest.get("frozen_inputs", {}).get(key)
+    if not value:
+        return None
+    path = Path(value).expanduser()
+    return (path if path.is_absolute() else manifest_path.parent / path).resolve()
+
+
+def _require_frozen_input_dir(manifest_path: Path, manifest: dict, key: str,
+                              supplied: str | Path | None, *, label: str) -> Path:
+    expected = _frozen_input_dir(manifest_path, manifest, key)
+    if expected is None:
+        raise ValueError(
+            f"paper manifest contains no frozen {label}; the held-out test split remains locked"
+        )
+    if supplied is None:
+        raise ValueError(
+            f"test split requires explicit {label} matching the frozen manifest identity: {expected}"
+        )
+    actual = Path(supplied).expanduser().resolve()
+    if actual != expected:
+        raise ValueError(
+            f"caller-supplied {label} does not match frozen manifest identity: "
+            f"supplied={actual}, frozen={expected}"
+        )
+    return expected
+
+
 def describe_split(manifest_path: str | Path, split: str) -> dict:
     path, manifest = load_manifest(manifest_path)
     spec = manifest.get("splits", {}).get(split)
@@ -46,6 +74,7 @@ def describe_split(manifest_path: str | Path, split: str) -> dict:
         "primary_methods": list(manifest.get("methods", {}).get("primary", [])),
         "parameterized_baselines": list(manifest.get("methods", {}).get("parameterized_baselines", [])),
         "learning_optional": list(manifest.get("methods", {}).get("learning_optional_after_training", [])),
+        "frozen_inputs": copy.deepcopy(manifest.get("frozen_inputs", {})),
         "rules": list(manifest.get("rules", [])),
     }
 
@@ -161,19 +190,17 @@ def run_split(manifest_path: str | Path, split: str, output: str | Path,
     baseline_selections = {}
     learning_selections = {}
     if split in ("test_main", "test_ood") and required_baselines:
-        if baseline_selection_dir is None:
-            raise ValueError(
-                "test split includes parameterized baselines but no frozen validation selections were supplied; "
-                "run zr10lab.research.baseline_tuning first and pass --baseline-selections"
-            )
-        baseline_selections = _read_baseline_selections(baseline_selection_dir, required_baselines)
+        frozen_baseline_dir = _require_frozen_input_dir(
+            path, manifest, "baseline_selection_dir", baseline_selection_dir,
+            label="frozen validation selections",
+        )
+        baseline_selections = _read_baseline_selections(frozen_baseline_dir, required_baselines)
     if split in ("test_main", "test_ood") and required_learning:
-        if learning_selection_dir is None:
-            raise ValueError(
-                "test split includes MAPPO/Safe-MAPPO but no validation-selected checkpoints were supplied; "
-                "run mappo_protocol select first and pass --learning-selections"
-            )
-        learning_selections = _read_learning_selections(learning_selection_dir, required_learning)
+        frozen_learning_dir = _require_frozen_input_dir(
+            path, manifest, "learning_selection_dir", learning_selection_dir,
+            label="validation-selected checkpoints",
+        )
+        learning_selections = _read_learning_selections(frozen_learning_dir, required_learning)
 
     root = Path(output).resolve() / split
     root.mkdir(parents=True, exist_ok=True)
@@ -185,6 +212,7 @@ def run_split(manifest_path: str | Path, split: str, output: str | Path,
         "seeds": seeds, "methods": chosen,
         "baseline_selections": baseline_selections,
         "learning_selections": learning_selections,
+        "frozen_inputs": copy.deepcopy(manifest.get("frozen_inputs", {})),
         "rules": manifest.get("rules", []),
     }
     (root / "protocol_snapshot.json").write_text(
@@ -211,9 +239,9 @@ def main(argv=None):
     parser.add_argument("--methods", nargs="+")
     parser.add_argument("--output", default="runs/paper_protocol")
     parser.add_argument("--baseline-selections",
-                        help="folder containing validation-selected selected_<method>.json files")
+                        help="explicit frozen baseline folder; for paper test it must exactly match manifest frozen_inputs")
     parser.add_argument("--learning-selections",
-                        help="folder containing <method>/selected_checkpoint.json for MAPPO baselines")
+                        help="explicit frozen learning folder; for paper test it must exactly match manifest frozen_inputs")
     parser.add_argument("--fail-fast", action="store_true")
     parser.add_argument("--describe", action="store_true",
                         help="print resolved split without running any experiment")
