@@ -3,10 +3,11 @@ study: persistent_search_continuous_monitoring
 base_config: search_monitor_base.yaml
 
 # Paper-test inputs are immutable identities resolved relative to this manifest.
-# The global gate remains false until every required non-learning selection and
-# learning checkpoint replica has been frozen and hash-pinned after validation.
+# The seven primary methods are frozen below. Optional learning baselines were
+# explicitly omitted before any held-out result was inspected; see
+# pretest_learning_decision and docs/MAPPO_BASELINE_PROTOCOL.md.
 frozen_inputs:
-  paper_test_unlocked: false
+  paper_test_unlocked: true
   baseline_selection_dir: frozen_baselines
   baseline_selection_sha256:
     weighted_rh: f9d2e1a68432478c3558d9b59e61b3bf27ec4fd85a9b27300c2a3ddf419fb8a3
@@ -14,7 +15,7 @@ frozen_inputs:
     info_planner: eaf5f13783b2b56caf6955dc1b804e6c1641d2c5a796d5b764d9a797670a1ae2
     ssm_belief: 4808e293a902276d83831ef7bca60d1239a064119dec71c27a597018ad051e99
 
-# Splits are frozen before full Monte Carlo results are generated.
+# Splits were frozen before full Monte Carlo results were generated.
 splits:
   train_learning_only:
     scenarios:
@@ -47,6 +48,29 @@ methods:
   parameter_free_baselines: [fixed_scan, greedy]
   parameterized_baselines: [weighted_rh, classical_ptz, info_planner, ssm_belief]
   learning_optional_after_training: [mappo, safe_mappo]
+
+# This decision is recorded before the first held-out run. The optional learning
+# baseline was strengthened through multiple train/validation-only diagnostics but
+# did not pass a minimum discovery gate. It is therefore omitted rather than
+# repeatedly redesigned after validation or retroactively added after test results.
+pretest_learning_decision:
+  made_before_any_heldout_run: true
+  main_table: omit_optional_learning_baselines
+  rationale: repeated_train_validation_diagnostics_failed_minimum_discovery_gate
+  final_diagnostic:
+    implementation: candidate_feature_v4_agentwise
+    commit: 2f2fc6b59eb3f8c31182c9f6c88e5e24e4b2adfe
+    workflow_run_id: 39962169263
+    validation_scenarios: [S4_boundary_handoff, S8_maneuver]
+    validation_seeds: [2001]
+    checkpoints: [10,20,30]
+    missed_target_rate: [1.0,1.0,1.0]
+    behavior_summary:
+      update_10: {search_actions: 24, hold_actions: 1256, max_observed_search_cells: 8}
+      update_20: {search_actions: 34, hold_actions: 1246, max_observed_search_cells: 4}
+      update_30: {search_actions: 1280, hold_actions: 0, max_observed_search_cells: 0}
+  formal_five_seed_workflow_started: false
+  heldout_splits_used_in_decision: false
 
 # Every parameterized non-learning baseline uses the same validation split, the
 # same deterministic parameter budget and the same selection rule. No test result
@@ -96,12 +120,13 @@ baseline_tuning:
     model_selection_split: validation_only
     test_splits: [test_main, test_ood]
 
-# Formal learning-baseline budget is precommitted before the v2 medium pilot is
-# inspected. This prevents choosing training seeds, training length or checkpoint
-# opportunities after seeing validation performance.
+# The formal learning budget remains as an auditable precommitment but is not run
+# for this frozen paper evaluation after the explicit pre-test omission decision.
 learning_protocol:
   mappo:
-    implementation: candidate_feature_v2
+    status: omitted_from_primary_after_pretest_train_validation_diagnostics
+    formal_candidate_implementation: candidate_feature_v2
+    final_development_diagnostic: candidate_feature_v4_agentwise
     network_seeds: [5101,5102,5103,5104,5105]
     updates: 300
     rollout_steps: 128
@@ -111,8 +136,9 @@ learning_protocol:
     selection: common_update_lexicographic_across_all_network_seeds_and_validation_cases
     forbid_best_seed_selection: true
     validation_split: validation_only
+    formal_workflow_started: false
   safe_mappo:
-    status: optional_after_mappo_stabilizes
+    status: not_run_after_mappo_failed_pretest_gate
     reuse_action_and_observation_representation: true
     validation_split: validation_only
 
@@ -177,7 +203,8 @@ rules:
   - Parameterized baselines must freeze their validation-selected JSON before any test split is run.
   - Paper-test selection directories must match frozen_inputs in this manifest; caller-supplied replacements are forbidden.
   - Frozen baseline selection files must match their manifest-pinned SHA-256 identities.
-  - Keep paper_test_unlocked false until every required learning selection and checkpoint hash is frozen after validation.
+  - Learning baselines are optional; held-out testing may be unlocked only after either frozen validation-selected learning replicas exist or an explicit pre-test omission decision is recorded while primary excludes learning methods.
+  - After the first held-out result is generated, no primary algorithm, frozen parameter, scenario, seed split, learning-inclusion decision or evaluation metric may be changed in response to test performance.
   - Discovery failure must be reported explicitly; post-discovery loss cannot substitute for discovery performance.
   - A failed or timed-out run remains in the experiment index and is not silently discarded.
   - Numerical results support or contradict predicted trends; they do not prove a theorem.
