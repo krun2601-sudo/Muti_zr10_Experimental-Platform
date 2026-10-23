@@ -44,7 +44,7 @@ splits:
 methods:
   primary: [fixed_scan, greedy, weighted_rh, classical_ptz, info_planner, ssm_belief, ecprh]
   parameter_free_baselines: [fixed_scan, greedy]
-  parameterized_baselines: [weighted_rh, classical_ptz, info_planner, sm_belief]
+  parameterized_baselines: [weighted_rh, classical_ptz, info_planner, ssm_belief]
   learning_optional_after_training: [mappo, safe_mappo]
 
 # Every parameterized non-learning baseline uses the same validation split, the
