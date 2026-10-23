@@ -34,6 +34,14 @@ def _policy(method: str, cfg):
     return build_paper_policy(method, cfg)
 
 
+def _policy_builder_name(method: str) -> str:
+    if method == "mappo":
+        return "zr10lab.research.mappo:MAPPOPolicy"
+    if method == "safe_mappo":
+        return "zr10lab.research.mappo:SafeMAPPOPolicy"
+    return "zr10lab.research.paper_policies:build_paper_policy"
+
+
 def run_research_simulation(cfg, method="ecprh", output=None, seed=None,
                             realtime=False, progress=None):
     """Run the paper task without physical hardware.
@@ -79,6 +87,6 @@ def run_research_simulation(cfg, method="ecprh", output=None, seed=None,
     write_research_provenance(recorder.path, cfg=cfg, extra={
         "run_method": str(method), "run_seed": run_seed,
         "environment": "sim", "completed": bool(completed),
-        "policy_builder": "zr10lab.research.paper_policies:build_paper_policy",
+        "policy_builder": _policy_builder_name(str(method)),
     })
     return recorder.path
