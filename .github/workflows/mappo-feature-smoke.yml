@@ -1,0 +1,84 @@
+name: mappo-feature-smoke
+
+on:
+  push:
+    branches: ["research/ecp-rh-experiments"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  feature-smoke:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[mappo-feature-smoke]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: zr10_cooperative_lab/pyproject.toml
+      - name: Install research and CPU PyTorch dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy scipy pandas PyYAML opencv-python-headless matplotlib gymnasium pytest
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - name: Verify feature-scored candidate representation
+        working-directory: zr10_cooperative_lab
+        run: |
+          pytest -q tests/test_candidate_feature_mappo.py tests/test_mappo_frozen_protocol.py tests/test_research_protocol.py
+      - name: Train feature-scored smoke on frozen training-only product
+        working-directory: zr10_cooperative_lab
+        run: |
+          python -m zr10lab.research.candidate_feature_mappo train \
+            configs/research/scenarios/S1_single.yaml \
+            configs/research/scenarios/S2_staggered.yaml \
+            configs/research/scenarios/S3_crossing.yaml \
+            configs/research/scenarios/S5_cluster_split.yaml \
+            configs/research/scenarios/S6_contention.yaml \
+            --output runs/mappo_feature_smoke/train \
+            --seed 5201 \
+            --env-seeds 1001 1002 1003 1004 1005 \
+            --updates 12 \
+            --rollout-steps 64 \
+            --checkpoint-every 6 \
+            --device cpu
+      - name: Validate smoke checkpoints on validation only
+        working-directory: zr10_cooperative_lab
+        run: |
+          CHECKPOINTS=(runs/mappo_feature_smoke/train/feature_mappo_seed5201_u*.pt)
+          python -m zr10lab.research.candidate_feature_mappo select \
+            "${CHECKPOINTS[@]}" \
+            --configs \
+              configs/research/scenarios/S4_boundary_handoff.yaml \
+              configs/research/scenarios/S8_maneuver.yaml \
+            --seeds 2001 2002 \
+            --output runs/mappo_feature_smoke/select \
+            --device cpu
+          cat runs/mappo_feature_smoke/select/validation_checkpoint_summary.csv
+          cat runs/mappo_feature_smoke/select/selected_checkpoint.json
+      - name: Audit feature-scored smoke provenance
+        working-directory: zr10_cooperative_lab
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          index = json.loads(Path('runs/mappo_feature_smoke/train/feature_mappo_seed5201_training_index.json').read_text())
+          assert index['implementation'] == 'candidate_feature_v2'
+          assert index['training_env_seeds'] == [1001,1002,1003,1004,1005]
+          meta = json.loads(Path(index['checkpoints'][-1] + '.json').read_text())
+          assert meta['candidate_feature_dim'] == 29
+          print('episodes_started=', meta['episodes_started'])
+          print('last_action_kind_fraction=', meta['history'][-1]['action_kind_fraction'])
+          forbidden = ['S10_heldout', 'S11_heldout', 'S9a_ood', 'S9b_ood', 'S7_overload']
+          assert not any(token in json.dumps(index) for token in forbidden)
+          PY
+      - name: Upload feature-scored smoke
+        uses: actions/upload-artifact@v4
+        with:
+          name: candidate-feature-mappo-smoke-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/mappo_feature_smoke
+          retention-days: 30
