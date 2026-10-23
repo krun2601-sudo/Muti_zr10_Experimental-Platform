@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "method": "info_planner",
+  "selection_rule": "lexicographic validation means over S4/S8 and seeds 2001-2005: missed-target rate, censored detection-delay P95, post-discovery total loss, maximum loss gap, revisit-age P95",
+  "selection_metrics": [
+    "research_missed_target_rate",
+    "research_detection_delay_censored_p95_s",
+    "research_total_loss_s",
+    "research_max_loss_gap_s",
+    "research_revisit_age_p95_s"
+  ],
+  "validation_configs": [
+    "scenarios/S4_boundary_handoff.yaml",
+    "scenarios/S8_maneuver.yaml"
+  ],
+  "validation_seeds": [2001, 2002, 2003, 2004, 2005],
+  "evaluated_parameter_count": 24,
+  "runs_per_parameter_tuple": 10,
+  "selected_params": {
+    "discovery_weight": 1.0,
+    "motion_weight": 0.02,
+    "track_information_weight": 0.5
+  },
+  "selected_summary": {
+    "runs": 10,
+    "research_missed_target_rate": 0.0,
+    "research_detection_delay_censored_p95_s": 1.5530000000000048,
+    "research_total_loss_s": 82.91000000000022,
+    "research_max_loss_gap_s": 63.26000000000054,
+    "research_revisit_age_p95_s": 6.683999999999619
+  },
+  "provenance": {
+    "workflow_run_id": 39903983283,
+    "data_generation_sha": "0bd57b010cce7f512c60022b89a9deb627328421",
+    "branch": "research/ecp-rh-experiments",
+    "parameter_sample_seed": 20261022,
+    "artifacts": [
+      {"seed": 2001, "artifact_id": 12480442784, "sha256": "e3395858459fcac6e32dae00b5edd6ca157a525255eccf7727b779b10ec09e30"},
+      {"seed": 2002, "artifact_id": 12481635484, "sha256": "130f0eb2302e46c1485c37259c735db0fbe60cf3c77a8dacb3be9d3e07f08d20"},
+      {"seed": 2003, "artifact_id": 12480816696, "sha256": "1a3045bc7cb702172ad34ac5c50b5504b9cd2f646ebedd2c7b21d19a32d03c29"},
+      {"seed": 2004, "artifact_id": 12481262442, "sha256": "bfb0f415c4adb45a2cba3744277cdb9ac92b619afa134e7cd6e12cb293a906c1"},
+      {"seed": 2005, "artifact_id": 12480880437, "sha256": "2ce6afe79fe183c9983efb98f4fa9a5b5bfc8785910ad5909cbd3ac0abcde553"}
+    ],
+    "test_splits_used_for_selection": false,
+    "tie_break_note": "Eight parameter tuples tied exactly on all frozen validation selection metrics; the deterministic sorted parameter order selected this tuple."
+  }
+}
