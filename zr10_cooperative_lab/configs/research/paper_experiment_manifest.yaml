@@ -96,6 +96,26 @@ baseline_tuning:
     model_selection_split: validation_only
     test_splits: [test_main, test_ood]
 
+# Formal learning-baseline budget is precommitted before the v2 medium pilot is
+# inspected. This prevents choosing training seeds, training length or checkpoint
+# opportunities after seeing validation performance.
+learning_protocol:
+  mappo:
+    implementation: candidate_feature_v2
+    network_seeds: [5101,5102,5103,5104,5105]
+    updates: 300
+    rollout_steps: 128
+    eligible_validation_updates: [150,200,250,300]
+    training_pair_count: 100
+    minimum_uses_per_training_pair_at_selected_checkpoint: 1
+    selection: common_update_lexicographic_across_all_network_seeds_and_validation_cases
+    forbid_best_seed_selection: true
+    validation_split: validation_only
+  safe_mappo:
+    status: optional_after_mappo_stabilizes
+    reuse_action_and_observation_representation: true
+    validation_split: validation_only
+
 ablations:
   - {id: no_uncertainty, config: ablations/no_uncertainty.yaml}
   - {id: no_overlap, config: ablations/no_overlap.yaml}
