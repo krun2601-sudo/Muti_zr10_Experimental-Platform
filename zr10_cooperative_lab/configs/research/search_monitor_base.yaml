@@ -26,6 +26,13 @@ policy:
       zoom_stable_tolerance: 0.002
       allow_sensing_while_moving: false
       zoom_rate_per_s: 3.0
+    # Public virtual sensing model. These are simulation parameters, not claims
+    # about measured ZR10 detector performance. The paper must report/sweep them.
+    sensing:
+      reference_target_extent_m: 0.25
+      discovery_min_pixels: 6.0
+      monitor_min_pixels: 12.0
+      max_effective_range_m: 500.0
     perception:
       seed: 7
       detection_probability: 0.96
@@ -35,12 +42,17 @@ policy:
       initial_covariance_m2: 1.0
       coast_timeout_s: 3.0
       random_time_bin_s: 0.1
+    # Fixed EO search is directional. The task grid is therefore an angular shell
+    # around the four-station centroid, converted internally to ordinary ENU points
+    # so the existing 3-D control-center visualization remains valid.
     search:
-      roi:
-        x: [100, 160]
-        y: [-50, 50]
-        z: [35, 85]
-      grid: [7, 9, 3]
+      domain:
+        type: angular_shell
+        origin_m: network_centroid
+        azimuth_deg: [-75, 75]
+        elevation_deg: [8, 38]
+        range_m: 170
+      grid: [13, 5, 1]
       initial_age_s: 10.0
       age_cap_s: 120.0
     planning:
@@ -51,7 +63,7 @@ policy:
       use_execution_model: true
       solver_time_limit_s: 0.12
       solver_mip_rel_gap: 0.001
-      search_candidates_per_device: 8
+      search_candidates_per_device: 10
       max_shared_targets: 3
       prediction_process_noise_m2ps: 0.5
       visibility_risk: 0.05
@@ -59,8 +71,11 @@ policy:
       inter_sample_motion_factor: 0.5
       fov_margin_deg: 0.25
       handover_overlap_s: 0.5
-      search_zoom_levels: [1.0, 2.0]
-      tracking_zoom_levels: [2.0, 4.0, 6.0, 8.0]
+      # At the nominal angular-shell range, 3x is approximately the first level
+      # meeting the public discovery-quality threshold; monitoring generally needs
+      # a higher zoom. The thresholds, not these comments, decide actual validity.
+      search_zoom_levels: [3.0]
+      tracking_zoom_levels: [4.0, 6.0, 8.0, 10.0]
       action_ttl_s: 0.8
     baselines:
       weighted_rh: {loss_weight: 10.0, overlap_weight: 3.0, search_weight: 1.0, motion_weight: 0.1}
