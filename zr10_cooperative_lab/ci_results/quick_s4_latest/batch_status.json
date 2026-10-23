@@ -1,0 +1,30 @@
+{
+  "attempted": 4,
+  "completed": 4,
+  "failed": 0,
+  "running_or_other": 0,
+  "completion_rate": 1.0,
+  "status_counts": {
+    "completed": 4
+  },
+  "failure_reasons": {},
+  "by_method": {
+    "ecprh": {
+      "completed": 1
+    },
+    "greedy": {
+      "completed": 1
+    },
+    "ssm_belief": {
+      "completed": 1
+    },
+    "weighted_rh": {
+      "completed": 1
+    }
+  },
+  "by_scenario": {
+    "S4-quick-ci": {
+      "completed": 4
+    }
+  }
+}

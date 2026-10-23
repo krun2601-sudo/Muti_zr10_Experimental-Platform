@@ -1,0 +1,5 @@
+source_sha=8567d5aec627b6eb927303aae426cc7a6135ddfd
+pilot_seed=7102
+scenario=S4_boundary_handoff_shortened_to_45s
+purpose=mechanism_diagnostic_only
+held_out_test_used=false
