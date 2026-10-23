@@ -39,4 +39,11 @@ def build_candidate_mappo_policy(cfg, *, safe: bool = False):
         )
         return (SparseFeatureCandidateSafeMAPPOPolicy(cfg) if safe
                 else SparseFeatureCandidateMAPPOPolicy(cfg))
+    if implementation == "candidate_feature_v3_freshness":
+        from .candidate_feature_reward_v3 import (
+            FreshnessFeatureCandidateMAPPOPolicy,
+            FreshnessFeatureCandidateSafeMAPPOPolicy,
+        )
+        return (FreshnessFeatureCandidateSafeMAPPOPolicy(cfg) if safe
+                else FreshnessFeatureCandidateMAPPOPolicy(cfg))
     raise ValueError(f"unsupported MAPPO checkpoint implementation: {implementation}")
