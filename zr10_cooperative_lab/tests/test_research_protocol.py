@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import numpy as np
@@ -38,7 +39,18 @@ def test_manifest_pins_baselines_but_keeps_learning_test_locked():
     frozen = manifest["frozen_inputs"]
     assert frozen["baseline_selection_dir"] == "frozen_baselines"
     assert "learning_selection_dir" not in frozen
-    assert (path.parent / frozen["baseline_selection_dir"]).is_dir()
+    directory = path.parent / frozen["baseline_selection_dir"]
+    assert directory.is_dir()
+
+    expected = set(manifest["methods"]["parameterized_baselines"])
+    hashes = frozen["baseline_selection_sha256"]
+    assert set(hashes) == expected
+    assert expected.issubset(set(manifest["methods"]["primary"]))
+    for method, expected_hash in hashes.items():
+        selection = directory / f"selected_{method}.json"
+        assert selection.is_file(), method
+        actual = hashlib.sha256(selection.read_bytes()).hexdigest()
+        assert actual == expected_hash, (method, expected_hash, actual)
 
 
 def test_ablation_override_does_not_replace_heldout_scenario():
