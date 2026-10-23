@@ -38,11 +38,10 @@ def test_frozen_manifest_has_disjoint_scenario_and_seed_splits():
     assert validation.isdisjoint(tests)
 
 
-def test_manifest_pins_baselines_but_keeps_learning_and_test_locked():
+def test_manifest_pins_baselines_and_test_gate_matches_pretest_learning_decision():
     path = Path("configs/research/paper_experiment_manifest.yaml")
     manifest = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
     frozen = manifest["frozen_inputs"]
-    assert frozen["paper_test_unlocked"] is False
     assert frozen["baseline_selection_dir"] == "frozen_baselines"
     assert "learning_selection_dir" not in frozen
     directory = path.parent / frozen["baseline_selection_dir"]
@@ -58,16 +57,33 @@ def test_manifest_pins_baselines_but_keeps_learning_and_test_locked():
         actual = hashlib.sha256(selection.read_bytes()).hexdigest()
         assert actual == expected_hash, (method, expected_hash, actual)
 
+    decision = manifest.get("pretest_learning_decision")
+    if bool(frozen["paper_test_unlocked"]):
+        assert isinstance(decision, dict)
+        assert decision.get("main_table") == "omit_optional_learning_baselines"
+        assert decision.get("made_before_any_heldout_run") is True
+        assert set(manifest["methods"]["primary"]).isdisjoint(
+            set(manifest["methods"].get("learning_optional_after_training", [])))
+    else:
+        assert decision is None or decision.get("main_table") != "omit_optional_learning_baselines"
 
-def test_paper_test_run_is_globally_locked_before_learning_freeze(tmp_path):
-    baseline_dir = Path("configs/research/frozen_baselines").resolve()
-    with pytest.raises(ValueError, match="globally locked"):
-        run_split(
-            "configs/research/paper_experiment_manifest.yaml",
-            "test_main", tmp_path,
-            methods=["weighted_rh"], paired=False,
-            baseline_selection_dir=baseline_dir,
-        )
+
+def test_paper_test_gate_is_locked_or_pretest_omission_is_explicit(tmp_path):
+    path = Path("configs/research/paper_experiment_manifest.yaml")
+    manifest = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
+    if not bool(manifest["frozen_inputs"]["paper_test_unlocked"]):
+        baseline_dir = Path("configs/research/frozen_baselines").resolve()
+        with pytest.raises(ValueError, match="globally locked"):
+            run_split(
+                path, "test_main", tmp_path,
+                methods=["weighted_rh"], paired=False,
+                baseline_selection_dir=baseline_dir,
+            )
+    else:
+        decision = manifest["pretest_learning_decision"]
+        assert decision["main_table"] == "omit_optional_learning_baselines"
+        assert decision["made_before_any_heldout_run"] is True
+        # Do not execute a held-out run in a unit test merely to prove it is unlocked.
 
 
 def test_non_manifest_baseline_selection_directory_is_rejected_without_running_test(tmp_path):
