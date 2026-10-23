@@ -9,7 +9,12 @@ import yaml
 
 from zr10lab.config import load_config
 from zr10lab.research.paper_policies import _RiskExecutionFactory
-from zr10lab.research.protocol import run_split
+from zr10lab.research.protocol import (
+    _read_baseline_selections,
+    _require_frozen_input_dir,
+    load_manifest,
+    run_split,
+)
 from zr10lab.research.rl_env import ResearchMARLEnv
 from zr10lab.research.scalability import benchmark_case
 from zr10lab.research.studies import _explicit_yaml_override, apply_override
@@ -33,10 +38,11 @@ def test_frozen_manifest_has_disjoint_scenario_and_seed_splits():
     assert validation.isdisjoint(tests)
 
 
-def test_manifest_pins_baselines_but_keeps_learning_test_locked():
+def test_manifest_pins_baselines_but_keeps_learning_and_test_locked():
     path = Path("configs/research/paper_experiment_manifest.yaml")
     manifest = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
     frozen = manifest["frozen_inputs"]
+    assert frozen["paper_test_unlocked"] is False
     assert frozen["baseline_selection_dir"] == "frozen_baselines"
     assert "learning_selection_dir" not in frozen
     directory = path.parent / frozen["baseline_selection_dir"]
@@ -51,6 +57,48 @@ def test_manifest_pins_baselines_but_keeps_learning_test_locked():
         assert selection.is_file(), method
         actual = hashlib.sha256(selection.read_bytes()).hexdigest()
         assert actual == expected_hash, (method, expected_hash, actual)
+
+
+def test_paper_test_run_is_globally_locked_before_learning_freeze(tmp_path):
+    baseline_dir = Path("configs/research/frozen_baselines").resolve()
+    with pytest.raises(ValueError, match="globally locked"):
+        run_split(
+            "configs/research/paper_experiment_manifest.yaml",
+            "test_main", tmp_path,
+            methods=["weighted_rh"], paired=False,
+            baseline_selection_dir=baseline_dir,
+        )
+
+
+def test_non_manifest_baseline_selection_directory_is_rejected_without_running_test(tmp_path):
+    manifest_path, manifest = load_manifest("configs/research/paper_experiment_manifest.yaml")
+    fake = tmp_path / "replacement"
+    fake.mkdir()
+    with pytest.raises(ValueError, match="does not match frozen manifest identity"):
+        _require_frozen_input_dir(
+            manifest_path, manifest, "baseline_selection_dir", fake,
+            label="frozen validation selections",
+        )
+
+
+def test_frozen_baseline_hash_mismatch_is_rejected_without_running_test():
+    directory = Path("configs/research/frozen_baselines").resolve()
+    with pytest.raises(ValueError, match="hash mismatch"):
+        _read_baseline_selections(
+            directory, ["weighted_rh"],
+            expected_sha256={"weighted_rh": "0" * 64},
+        )
+
+
+def test_learning_directory_cannot_be_supplied_before_manifest_freeze(tmp_path):
+    manifest_path, manifest = load_manifest("configs/research/paper_experiment_manifest.yaml")
+    fake = tmp_path / "candidate_checkpoints"
+    fake.mkdir()
+    with pytest.raises(ValueError, match="no frozen validation-selected checkpoints"):
+        _require_frozen_input_dir(
+            manifest_path, manifest, "learning_selection_dir", fake,
+            label="validation-selected checkpoints",
+        )
 
 
 def test_ablation_override_does_not_replace_heldout_scenario():
@@ -124,47 +172,3 @@ def test_mappo_cost_penalizes_active_but_undiscovered_target():
     assert cost > 0.0
     assert info["reward_uses_privileged_truth"] is True
     assert np.isfinite(obs).all()
-
-
-def test_test_split_refuses_parameterized_baseline_without_validation_selection(tmp_path):
-    with pytest.raises(ValueError, match="frozen validation selections"):
-        run_split(
-            "configs/research/paper_experiment_manifest.yaml",
-            "test_main", tmp_path,
-            methods=["weighted_rh"], paired=False,
-            baseline_selection_dir=None,
-        )
-
-
-def test_test_split_refuses_non_manifest_baseline_selection_directory(tmp_path):
-    fake = tmp_path / "replacement"
-    fake.mkdir()
-    with pytest.raises(ValueError, match="does not match frozen manifest identity"):
-        run_split(
-            "configs/research/paper_experiment_manifest.yaml",
-            "test_main", tmp_path / "out",
-            methods=["weighted_rh"], paired=False,
-            baseline_selection_dir=fake,
-        )
-
-
-def test_test_split_refuses_learning_method_without_validation_checkpoint(tmp_path):
-    with pytest.raises(ValueError, match="validation-selected checkpoints"):
-        run_split(
-            "configs/research/paper_experiment_manifest.yaml",
-            "test_main", tmp_path,
-            methods=["mappo"], paired=False,
-            learning_selection_dir=None,
-        )
-
-
-def test_arbitrary_learning_directory_cannot_unlock_test_before_manifest_freeze(tmp_path):
-    fake = tmp_path / "candidate_checkpoints"
-    fake.mkdir()
-    with pytest.raises(ValueError, match="no frozen validation-selected checkpoints"):
-        run_split(
-            "configs/research/paper_experiment_manifest.yaml",
-            "test_main", tmp_path / "out",
-            methods=["mappo"], paired=False,
-            learning_selection_dir=fake,
-        )
