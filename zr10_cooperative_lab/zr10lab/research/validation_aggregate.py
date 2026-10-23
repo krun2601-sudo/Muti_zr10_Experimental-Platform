@@ -11,6 +11,7 @@ from .baseline_tuning import SELECTION_METRICS
 
 
 EXPECTED_VALIDATION_SEEDS = (2001, 2002, 2003, 2004, 2005)
+EXPECTED_VALIDATION_SCENARIOS = ("S4_boundary_handoff.yaml", "S8_maneuver.yaml")
 
 
 def _finite_mean(series) -> float:
@@ -23,7 +24,9 @@ def _score(row: dict) -> tuple[float, ...]:
     return tuple(float(row.get(metric, float("inf"))) for metric in SELECTION_METRICS)
 
 
-def aggregate_method(root: Path, method: str, output: Path) -> Path:
+def aggregate_method(root: Path, method: str, output: Path, *,
+                     workflow_run_id: str | None = None,
+                     data_commit_sha: str | None = None) -> Path:
     files = sorted(root.glob(f"**/{method}/seed_*/tuning_runs.csv"))
     if not files:
         # GitHub artifact extraction often removes the leading method directory.
@@ -47,13 +50,22 @@ def aggregate_method(root: Path, method: str, output: Path) -> Path:
             "refusing to freeze parameters from incomplete validation data"
         )
 
+    if "config" not in data.columns:
+        raise ValueError(f"{method}: validation data has no config column")
+    scenario_names = tuple(sorted({Path(str(x)).name for x in data["config"].unique()}))
+    if scenario_names != tuple(sorted(EXPECTED_VALIDATION_SCENARIOS)):
+        raise ValueError(
+            f"{method}: validation scenarios are {scenario_names}, expected "
+            f"{tuple(sorted(EXPECTED_VALIDATION_SCENARIOS))}"
+        )
+
     param_cols = sorted(c for c in data.columns if c.startswith("param_"))
     if not param_cols:
         raise ValueError(f"{method}: no param_* columns in validation data")
 
     # Every parameter tuple must have exactly both frozen validation scenarios for
     # every seed.  This catches partial/failed artifacts before model selection.
-    expected_runs_per_tuple = len(EXPECTED_VALIDATION_SEEDS) * 2
+    expected_runs_per_tuple = len(EXPECTED_VALIDATION_SEEDS) * len(EXPECTED_VALIDATION_SCENARIOS)
     grouped = data.groupby(param_cols, dropna=False, sort=True)
     rows = []
     for params, block in grouped:
@@ -62,6 +74,9 @@ def aggregate_method(root: Path, method: str, output: Path) -> Path:
         block_seeds = tuple(sorted({int(x) for x in block["seed"].unique()}))
         if block_seeds != EXPECTED_VALIDATION_SEEDS:
             raise ValueError(f"{method}: parameter tuple {params} is missing validation seeds")
+        block_scenarios = tuple(sorted({Path(str(x)).name for x in block["config"].unique()}))
+        if block_scenarios != tuple(sorted(EXPECTED_VALIDATION_SCENARIOS)):
+            raise ValueError(f"{method}: parameter tuple {params} is missing validation scenarios")
         if len(block) != expected_runs_per_tuple:
             raise ValueError(
                 f"{method}: parameter tuple {params} has {len(block)} runs; "
@@ -89,9 +104,12 @@ def aggregate_method(root: Path, method: str, output: Path) -> Path:
             "maximum loss gap, revisit-age P95"
         ),
         "selection_metrics": list(SELECTION_METRICS),
+        "validation_configs": list(EXPECTED_VALIDATION_SCENARIOS),
         "validation_seeds": list(EXPECTED_VALIDATION_SEEDS),
         "evaluated_parameter_count": len(rows),
         "runs_per_parameter_tuple": expected_runs_per_tuple,
+        "workflow_run_id": workflow_run_id,
+        "data_commit_sha": data_commit_sha,
         "selected_params": selected_params,
         "selected_summary": selected,
         "source_files": [str(p) for p in files],
@@ -114,10 +132,16 @@ def main(argv=None):
         "weighted_rh", "classical_ptz", "info_planner", "ssm_belief"
     ])
     parser.add_argument("--output", type=Path, default=Path("runs/validation_selected"))
+    parser.add_argument("--workflow-run-id")
+    parser.add_argument("--data-commit-sha")
     args = parser.parse_args(argv)
 
     for method in args.methods:
-        print(aggregate_method(args.root.resolve(), method, args.output.resolve()))
+        print(aggregate_method(
+            args.root.resolve(), method, args.output.resolve(),
+            workflow_run_id=args.workflow_run_id,
+            data_commit_sha=args.data_commit_sha,
+        ))
 
 
 if __name__ == "__main__":
