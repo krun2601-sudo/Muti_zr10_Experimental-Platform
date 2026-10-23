@@ -74,7 +74,8 @@ def test_mappo_cycles_frozen_scenario_seed_product_not_network_seed():
     assert env.episode_usage
 
 
-def test_mappo_provenance_names_actual_candidate_builder():
-    assert _policy_builder_name("mappo").endswith(":CandidateMAPPOPolicy")
-    assert _policy_builder_name("safe_mappo").endswith(":CandidateSafeMAPPOPolicy")
+def test_mappo_provenance_names_versioned_candidate_dispatcher():
+    expected = "zr10lab.research.candidate_mappo_dispatch:build_candidate_mappo_policy"
+    assert _policy_builder_name("mappo") == expected
+    assert _policy_builder_name("safe_mappo") == expected
     assert _policy_builder_name("ecprh").endswith(":build_paper_policy")
