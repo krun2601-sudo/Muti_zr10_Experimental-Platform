@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "method": "weighted_rh",
+  "selection_rule": "lexicographic validation means over S4/S8 and seeds 2001-2005: missed-target rate, censored detection-delay P95, post-discovery total loss, maximum loss gap, revisit-age P95",
+  "selection_metrics": [
+    "research_missed_target_rate",
+    "research_detection_delay_censored_p95_s",
+    "research_total_loss_s",
+    "research_max_loss_gap_s",
+    "research_revisit_age_p95_s"
+  ],
+  "validation_configs": [
+    "scenarios/S4_boundary_handoff.yaml",
+    "scenarios/S8_maneuver.yaml"
+  ],
+  "validation_seeds": [2001, 2002, 2003, 2004, 2005],
+  "evaluated_parameter_count": 24,
+  "runs_per_parameter_tuple": 10,
+  "selected_params": {
+    "loss_weight": 100.0,
+    "motion_weight": 0.0,
+    "overlap_weight": 1.0,
+    "search_weight": 1.0
+  },
+  "selected_summary": {
+    "runs": 10,
+    "research_missed_target_rate": 0.0,
+    "research_detection_delay_censored_p95_s": 1.7780000000000153,
+    "research_total_loss_s": 3.16,
+    "research_max_loss_gap_s": 1.6799999999999997,
+    "research_revisit_age_p95_s": 12.675999999999341
+  },
+  "provenance": {
+    "workflow_run_id": 39903983283,
+    "data_generation_sha": "0bd57b010cce7f512c60022b89a9deb627328421",
+    "branch": "research/ecp-rh-experiments",
+    "parameter_sample_seed": 20261022,
+    "artifacts": [
+      {"seed": 2001, "artifact_id": 12480118368, "sha256": "066b79153c63d014453a914097b2e5fb076cde8942ba3c52e35b7e884fb6bb1a"},
+      {"seed": 2002, "artifact_id": 12481023824, "sha256": "30f9320f9430582bb96a4626efc8a73985b99c444d1b65a63725913243a88971"},
+      {"seed": 2003, "artifact_id": 12480714718, "sha256": "d2a010a68d0f9a09bab32bee9aed45944d26e3e05f5eeb345045d46eb47d8f61"},
+      {"seed": 2004, "artifact_id": 12480367940, "sha256": "680916924f4173f631f199192a03486138c6d54fe6a2dfe29cf0154d9552b53c"},
+      {"seed": 2005, "artifact_id": 12481202808, "sha256": "4edd31cda69d3c7b238d4950299090bd2ca0aba70956f45850ec61a97cf9ade6"}
+    ],
+    "test_splits_used_for_selection": false
+  }
+}
