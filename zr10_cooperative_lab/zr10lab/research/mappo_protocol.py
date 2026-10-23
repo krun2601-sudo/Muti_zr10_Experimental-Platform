@@ -25,21 +25,62 @@ SELECTION_METRICS = (
 )
 
 
-class MultiScenarioResearchEnv:
-    """Cycle deterministically across frozen training scenarios at episode reset."""
+def _observation_capacity(cfg, *, safe=False) -> tuple[int, int]:
+    baselines = cfg.policy.get("research", {}).get("baselines", {})
+    key = "safe_mappo" if safe else "mappo"
+    options = dict(baselines.get(key, {}))
+    fallback = dict(baselines.get("mappo", {}))
+    max_targets = int(options.get("max_targets", fallback.get("max_targets", 8)))
+    top_search_cells = int(options.get("top_search_cells", fallback.get("top_search_cells", 65)))
+    if max_targets < 1 or top_search_cells < 1:
+        raise ValueError("MAPPO observation capacities must be positive")
+    return max_targets, top_search_cells
 
-    def __init__(self, configs, seed=0):
+
+class MultiScenarioResearchEnv:
+    """Cycle over the frozen training scenario x environment-seed product.
+
+    ``network_seed`` controls policy initialization/sampling only.  Stochastic
+    environment realizations come from ``episode_seeds`` so the manifest's train,
+    validation and test seed partitions remain explicit and auditable.
+    """
+
+    def __init__(self, configs, network_seed=0, *, safe=False, episode_seeds=None):
         if not configs:
             raise ValueError("MAPPO training requires at least one scenario")
         self.configs = [copy.deepcopy(cfg) for cfg in configs]
-        self.base_seed = int(seed)
+        self.network_seed = int(network_seed)
+        self.safe = bool(safe)
+        self.episode_seeds = tuple(int(x) for x in (episode_seeds or [network_seed]))
+        if not self.episode_seeds:
+            raise ValueError("MAPPO training requires at least one environment seed")
+        self.episode_specs = [
+            (cfg_index, env_seed)
+            for env_seed in self.episode_seeds
+            for cfg_index in range(len(self.configs))
+        ]
         self.episode = 0
-        self.env = ResearchMARLEnv(self.configs[0], seed=self.base_seed)
+
+        capacities = [_observation_capacity(cfg, safe=self.safe) for cfg in self.configs]
+        if len(set(capacities)) != 1:
+            raise ValueError("all MAPPO training scenarios must share observation capacities")
+        self.max_targets, self.top_search_cells = capacities[0]
+
+        first_cfg, first_seed = self.episode_specs[0]
+        self.env = self._make_env(first_cfg, first_seed)
         signature = (self.env.n_agents, self.env.obs_dim, self.env.action_dim)
-        for cfg in self.configs[1:]:
-            probe = ResearchMARLEnv(cfg, seed=self.base_seed)
+        for cfg_index, cfg in enumerate(self.configs[1:], start=1):
+            probe = self._make_env(cfg_index, self.episode_seeds[0])
             if (probe.n_agents, probe.obs_dim, probe.action_dim) != signature:
                 raise ValueError("all MAPPO training scenarios must share agent/observation/action dimensions")
+
+    def _make_env(self, cfg_index: int, env_seed: int):
+        return ResearchMARLEnv(
+            self.configs[int(cfg_index)],
+            seed=int(env_seed),
+            max_targets=self.max_targets,
+            top_search_cells=self.top_search_cells,
+        )
 
     @property
     def n_agents(self): return self.env.n_agents
@@ -49,9 +90,9 @@ class MultiScenarioResearchEnv:
     def action_dim(self): return self.env.action_dim
 
     def reset(self, seed=None):
-        index = self.episode % len(self.configs)
-        episode_seed = self.base_seed + self.episode if seed is None else int(seed)
-        self.env = ResearchMARLEnv(self.configs[index], seed=episode_seed)
+        cfg_index, frozen_seed = self.episode_specs[self.episode % len(self.episode_specs)]
+        episode_seed = int(frozen_seed if seed is None else seed)
+        self.env = self._make_env(cfg_index, episode_seed)
         self.episode += 1
         return self.env.reset(seed=episode_seed)
 
@@ -60,16 +101,19 @@ class MultiScenarioResearchEnv:
 
 
 def _save_checkpoint(net, path: Path, *, safe, seed, settings, history, env,
-                     update, training_scenarios):
+                     update, training_scenarios, training_env_seeds):
     torch, _ = _torch()
     path.parent.mkdir(parents=True, exist_ok=True)
     checkpoint = {
         "state_dict": net.state_dict(), "safe": bool(safe), "seed": int(seed),
         "obs_dim": env.obs_dim, "state_dim": env.n_agents * env.obs_dim,
         "action_dim": env.action_dim, "n_agents": env.n_agents,
+        "max_targets": int(env.max_targets),
+        "top_search_cells": int(env.top_search_cells),
         "train_config": settings.__dict__, "history": list(history),
         "training_update": int(update),
         "training_scenarios": list(training_scenarios),
+        "training_env_seeds": [int(x) for x in training_env_seeds],
     }
     torch.save(checkpoint, path)
     metadata = {k:v for k,v in checkpoint.items() if k != "state_dict"}
@@ -80,20 +124,22 @@ def _save_checkpoint(net, path: Path, *, safe, seed, settings, history, env,
 
 
 def train_mappo_protocol(train_configs: Iterable[str | Path], output_dir: str | Path,
-                         *, safe=False, seed=0, settings: MAPPOTrainConfig | None=None,
+                         *, safe=False, seed=0, training_env_seeds=None,
+                         settings: MAPPOTrainConfig | None=None,
                          device="cpu", checkpoint_every=25):
-    """Train MAPPO only on an explicit frozen training scenario list.
+    """Train MAPPO only on an explicit frozen training scenario/seed product.
 
-    Scenarios rotate at episode boundaries. Periodic checkpoints are intended for
-    validation-only selection; the held-out test split must never be passed here.
+    Periodic checkpoints are intended for validation-only model selection. Held-out
+    test scenarios/seeds must never be passed to this function.
     """
     torch, _ = _torch()
     cfg_paths = [Path(p).resolve() for p in train_configs]
     cfgs = [load_config(p) for p in cfg_paths]
     settings = settings or MAPPOTrainConfig()
+    env_seeds = tuple(int(x) for x in (training_env_seeds or [seed]))
     np.random.seed(int(seed)); torch.manual_seed(int(seed))
-    env = MultiScenarioResearchEnv(cfgs, seed=seed)
-    obs, state = env.reset(seed=seed)
+    env = MultiScenarioResearchEnv(cfgs, network_seed=seed, safe=safe, episode_seeds=env_seeds)
+    obs, state = env.reset()
     net = SharedActorCritic(env.obs_dim, len(state), env.action_dim, safe=safe, device=device)
     optimizer = torch.optim.Adam(net.model.parameters(), lr=settings.lr)
     lagrange = 0.0; history = []; checkpoints = []
@@ -153,10 +199,12 @@ def train_mappo_protocol(train_configs: Iterable[str | Path], output_dir: str | 
             name=("safe_mappo" if safe else "mappo")+f"_seed{int(seed)}_u{update+1:04d}.pt"
             checkpoints.append(str(_save_checkpoint(net,Path(output_dir)/name,safe=safe,seed=seed,
                 settings=settings,history=history,env=env,update=update+1,
-                training_scenarios=[str(p) for p in cfg_paths])))
+                training_scenarios=[str(p) for p in cfg_paths], training_env_seeds=env_seeds)))
     Path(output_dir).mkdir(parents=True,exist_ok=True)
     (Path(output_dir)/f"{'safe_mappo' if safe else 'mappo'}_seed{seed}_training_index.json").write_text(
         json.dumps({"safe":bool(safe),"seed":int(seed),"training_scenarios":[str(p) for p in cfg_paths],
+                    "training_env_seeds":[int(x) for x in env_seeds],
+                    "max_targets":int(env.max_targets),"top_search_cells":int(env.top_search_cells),
                     "checkpoints":checkpoints,"train_config":settings.__dict__},ensure_ascii=False,indent=2),
         encoding="utf-8")
     return checkpoints
@@ -211,7 +259,8 @@ def main(argv=None):
     parser=argparse.ArgumentParser(description="Frozen multi-scenario MAPPO training/validation protocol")
     sub=parser.add_subparsers(dest="command",required=True)
     p=sub.add_parser("train"); p.add_argument("configs",nargs="+"); p.add_argument("--output",required=True)
-    p.add_argument("--seed",type=int,default=0); p.add_argument("--safe",action="store_true")
+    p.add_argument("--seed",type=int,default=0); p.add_argument("--env-seeds",nargs="+",type=int)
+    p.add_argument("--safe",action="store_true")
     p.add_argument("--updates",type=int,default=300); p.add_argument("--rollout-steps",type=int,default=256)
     p.add_argument("--checkpoint-every",type=int,default=25); p.add_argument("--device",default="cpu")
     p=sub.add_parser("select"); p.add_argument("checkpoints",nargs="+"); p.add_argument("--configs",nargs="+",required=True)
@@ -221,7 +270,8 @@ def main(argv=None):
     if args.command=="train":
         settings=MAPPOTrainConfig(updates=args.updates,rollout_steps=args.rollout_steps)
         print("\n".join(train_mappo_protocol(args.configs,args.output,safe=args.safe,seed=args.seed,
-              settings=settings,device=args.device,checkpoint_every=args.checkpoint_every)))
+              training_env_seeds=args.env_seeds,settings=settings,device=args.device,
+              checkpoint_every=args.checkpoint_every)))
     else:
         print(json.dumps(select_checkpoint(args.checkpoints,args.configs,args.seeds,args.output,
               safe=args.safe,device=args.device),ensure_ascii=False,indent=2))
