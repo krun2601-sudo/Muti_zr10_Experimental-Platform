@@ -7,13 +7,14 @@ from typing import Any
 import numpy as np
 
 from ..geometry import project_world_points
+from .sensing_quality import SensingQualityModel
 from .types import DeviceReadiness, SearchGridSnapshot
 
 
 class ReadinessTracker:
     """Track whether each virtual PTZ can currently contribute a valid observation.
 
-    Movement/zoom transition resets the settling timer.  This belongs to the
+    Movement/zoom transition resets the settling timer. This belongs to the
     experiment world rather than any policy so every baseline sees the same
     sensor availability.
     """
@@ -70,29 +71,91 @@ class ReadinessTracker:
 
 
 class PersistentSearchMap:
-    """Discretized persistent-search freshness state shared by every method."""
+    """Persistent-search freshness state shared by every paper method.
+
+    Two public task-domain representations are supported:
+
+    ``cartesian`` (legacy)
+        A 3-D box sampled on x/y/z.
+
+    ``angular_shell`` (recommended for fixed EO search)
+        Azimuth/elevation/range samples about a public reference origin. The shell
+        is converted to ordinary ENU 3-D points, so all existing PTZ geometry and
+        the control-center 3-D visualization remain unchanged.
+
+    A cell is reset only when it is geometrically inside a ready camera FOV *and*
+    the public virtual sensing model supplies enough pixels-on-target for discovery.
+    This prevents a very wide low-zoom view from counting as an effective search
+    observation at arbitrary range.
+    """
 
     def __init__(self, cfg):
+        self.cfg = cfg
         research = cfg.policy.get("research", {})
         options = research.get("search", {})
-        roi = options.get("roi", research.get("scenario", {}).get("roi", cfg.policy.get("roi")))
-        if not roi:
-            raise ValueError("research persistent search needs an ROI")
-        shape = options.get("grid", [7, 7, 3])
-        if len(shape) != 3 or any(int(n) != n or int(n) <= 0 for n in shape):
-            raise ValueError("research.search.grid must contain three positive integers")
-        self.shape = tuple(int(n) for n in shape)
-        axes = [np.linspace(float(roi[k][0]), float(roi[k][1]), self.shape[i])
-                for i, k in enumerate(("x", "y", "z"))]
-        self.positions = np.asarray(list(product(*axes)), dtype=float)
+        self.quality = SensingQualityModel(cfg)
+        self.positions = self._build_positions(options, research, cfg)
+        self.shape = tuple(int(x) for x in options.get("grid", [len(self.positions), 1, 1]))
         self.initial_age_s = float(options.get("initial_age_s", 0.0))
         self.age_cap_s = float(options.get("age_cap_s", 1e6))
         if self.initial_age_s < 0 or self.age_cap_s <= 0:
             raise ValueError("search ages must be non-negative and age_cap_s positive")
+        if not len(self.positions):
+            raise ValueError("persistent-search domain produced no cells")
         self.reset(0.0)
 
+    @staticmethod
+    def _network_centroid(cfg) -> np.ndarray:
+        rows = np.asarray([d.position_m for d in cfg.active_devices], dtype=float)
+        if rows.ndim != 2 or rows.shape[1] != 3 or not len(rows):
+            raise ValueError("angular search domain requires at least one valid device position")
+        return rows.mean(axis=0)
+
+    def _build_positions(self, options, research, cfg) -> np.ndarray:
+        domain = options.get("domain", {})
+        kind = str(domain.get("type", "cartesian")).lower()
+        shape = options.get("grid", [7, 7, 3])
+        if len(shape) != 3 or any(int(n) != n or int(n) <= 0 for n in shape):
+            raise ValueError("research.search.grid must contain three positive integers")
+        shape = tuple(int(n) for n in shape)
+        if kind in {"cartesian", "box"}:
+            roi = options.get("roi", research.get("scenario", {}).get("roi", cfg.policy.get("roi")))
+            if not roi:
+                raise ValueError("cartesian persistent search needs an ROI")
+            axes = [np.linspace(float(roi[k][0]), float(roi[k][1]), shape[i])
+                    for i, k in enumerate(("x", "y", "z"))]
+            return np.asarray(list(product(*axes)), dtype=float)
+        if kind != "angular_shell":
+            raise ValueError(f"unsupported research.search.domain.type: {kind!r}")
+
+        origin_value = domain.get("origin_m", "network_centroid")
+        origin = (self._network_centroid(cfg) if isinstance(origin_value, str) and origin_value == "network_centroid"
+                  else np.asarray(origin_value, dtype=float))
+        if origin.shape != (3,) or not np.all(np.isfinite(origin)):
+            raise ValueError("angular search origin_m must be a finite 3-vector or network_centroid")
+        az_range = domain.get("azimuth_deg", [-75.0, 75.0])
+        el_range = domain.get("elevation_deg", [8.0, 38.0])
+        range_value = domain.get("range_m", 170.0)
+        if len(az_range) != 2 or len(el_range) != 2:
+            raise ValueError("angular search azimuth/elevation ranges need [min,max]")
+        if np.isscalar(range_value):
+            ranges = np.full(shape[2], float(range_value), dtype=float)
+        else:
+            if len(range_value) != 2:
+                raise ValueError("angular search range_m must be scalar or [min,max]")
+            ranges = np.linspace(float(range_value[0]), float(range_value[1]), shape[2])
+        if np.any(ranges <= 0):
+            raise ValueError("angular search ranges must be positive")
+        azimuths = np.deg2rad(np.linspace(float(az_range[0]), float(az_range[1]), shape[0]))
+        elevations = np.deg2rad(np.linspace(float(el_range[0]), float(el_range[1]), shape[1]))
+        points = []
+        for az, el, radius in product(azimuths, elevations, ranges):
+            ce = math.cos(float(el))
+            direction = np.array([ce * math.cos(float(az)), ce * math.sin(float(az)), math.sin(float(el))])
+            points.append(origin + float(radius) * direction)
+        return np.asarray(points, dtype=float)
+
     def reset(self, t0: float = 0.0) -> None:
-        # last_visit=t0-initial_age gives an immediately interpretable age.
         self.last_visit = np.full(len(self.positions), float(t0) - self.initial_age_s, dtype=float)
         self.ever_observed = np.zeros(len(self.positions), dtype=bool)
         self._last_t = float(t0)
@@ -113,7 +176,14 @@ class PersistentSearchMap:
                 projected = project_world_points(self.positions, state, config)
             except ValueError:
                 continue
-            observed |= np.fromiter((p is not None for p in projected), dtype=bool, count=len(projected))
+            geometric = np.fromiter((p is not None for p in projected), dtype=bool, count=len(projected))
+            if not geometric.any():
+                continue
+            quality = np.fromiter(
+                (self.quality.discovery_valid(point, config, float(state.zoom)) for point in self.positions),
+                dtype=bool, count=len(self.positions),
+            )
+            observed |= geometric & quality
         self.last_visit[observed] = float(t)
         self.ever_observed |= observed
         self._observed_now = observed
