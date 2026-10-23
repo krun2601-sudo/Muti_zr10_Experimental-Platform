@@ -68,6 +68,15 @@ class PaperInformationPlannerPolicy(InformationPlannerPolicy):
 class PaperSSMBeliefPolicy(SSMBeliefPolicy):
     def __init__(self, cfg):
         super().__init__(cfg)
+        # The public paper baseline is named ``ssm_belief`` everywhere else
+        # (manifest, tuning, protocol and plots).  Read the same namespace here
+        # so validation-selected parameters actually reach the policy.  The base
+        # class historically used ``ssm`` and is retained only for compatibility.
+        opt = cfg.policy.get("research", {}).get("baselines", {}).get("ssm_belief", {})
+        self.gamma = float(opt.get("gamma", self.gamma))
+        self.monitor_weight = float(opt.get("monitor_weight", self.monitor_weight))
+        self.search_weight = float(opt.get("search_weight", self.search_weight))
+        self.motion_weight = float(opt.get("motion_weight", self.motion_weight))
         self.factory = RiskAwarePrimitiveFactory(cfg)
         self.ttl = self.factory.ttl_s
 
