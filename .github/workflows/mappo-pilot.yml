@@ -23,9 +23,13 @@ jobs:
       - name: Install research and CPU PyTorch dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install numpy scipy PyYAML opencv-python-headless matplotlib gymnasium
+          python -m pip install numpy scipy PyYAML opencv-python-headless matplotlib gymnasium pytest
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
           python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - name: Run frozen MAPPO protocol regression tests
+        working-directory: zr10_cooperative_lab
+        run: |
+          pytest -q tests/test_mappo_frozen_protocol.py tests/test_research_protocol.py
       - name: Train short MAPPO pipeline pilot on training-only scenarios
         working-directory: zr10_cooperative_lab
         run: |
@@ -37,11 +41,30 @@ jobs:
             configs/research/scenarios/S6_contention.yaml \
             --output runs/mappo_pilot/train \
             --seed 5101 \
+            --env-seeds 1001 1002 \
             --updates 10 \
             --rollout-steps 64 \
             --checkpoint-every 5 \
             --device cpu
           ls -lh runs/mappo_pilot/train
+      - name: Verify training metadata uses full-grid observation and frozen train seeds
+        working-directory: zr10_cooperative_lab
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          index = json.loads(Path('runs/mappo_pilot/train/mappo_seed5101_training_index.json').read_text())
+          assert index['training_env_seeds'] == [1001, 1002]
+          assert index['max_targets'] == 8
+          assert index['top_search_cells'] == 65
+          for checkpoint in index['checkpoints']:
+              meta = json.loads(Path(checkpoint + '.json').read_text())
+              assert meta['training_env_seeds'] == [1001, 1002]
+              assert meta['max_targets'] == 8
+              assert meta['top_search_cells'] == 65
+              assert meta['obs_dim'] == 285
+          print('MAPPO training metadata OK')
+          PY
       - name: Select pilot checkpoint on validation-only S4/S8
         working-directory: zr10_cooperative_lab
         run: |
@@ -68,6 +91,7 @@ jobs:
           assert not any(token in text for token in forbidden), text
           assert all(token in text for token in ['S1_single', 'S2_staggered', 'S3_crossing', 'S5_cluster_split', 'S6_contention'])
           assert 'S4_boundary_handoff' in text and 'S8_maneuver' in text
+          assert train['training_env_seeds'] == [1001, 1002]
           print('MAPPO pilot split provenance OK')
           PY
       - name: Upload MAPPO pilot outputs
