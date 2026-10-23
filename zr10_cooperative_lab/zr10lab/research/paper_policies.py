@@ -75,11 +75,10 @@ class PaperSSMBeliefPolicy(SSMBeliefPolicy):
 class PaperFixedScanReactivePolicy(FixedScanReactivePolicy):
     """Fair engineering baseline under the common effective-quality model.
 
-    The original engineering baseline always used minimum zoom for scanning. Under
-    a range-dependent virtual sensing model that can make the commanded view
-    physically incapable of discovery. The paper baseline therefore uses fixed,
-    *public* search/track zooms (default 3x/6x) but keeps the same simple partitioned
-    cyclic scan and reactive one-device takeover logic.
+    The baseline keeps simple partitioned cyclic scanning + reactive one-camera
+    takeover, but it must obey the same PTZ mechanical limits and command a public
+    quality-valid fixed search/track zoom. Unreachable cells are skipped rather
+    than clipped by the action layer.
     """
 
     def __init__(self, cfg):
@@ -87,6 +86,12 @@ class PaperFixedScanReactivePolicy(FixedScanReactivePolicy):
         options = cfg.policy.get("research", {}).get("baselines", {}).get("fixed_scan", {})
         self.paper_search_zoom = float(options.get("search_zoom", 3.0))
         self.paper_track_zoom = float(options.get("track_zoom", 6.0))
+
+    @staticmethod
+    def _reachable(device, yaw: float, pitch: float, zoom: float) -> bool:
+        return (device.yaw_limits_deg[0] - 1e-9 <= float(yaw) <= device.yaw_limits_deg[1] + 1e-9 and
+                device.pitch_limits_deg[0] - 1e-9 <= float(pitch) <= device.pitch_limits_deg[1] + 1e-9 and
+                device.zoom_limits[0] - 1e-9 <= float(zoom) <= device.zoom_limits[1] + 1e-9)
 
     def decide(self, context):
         self._check(context)
@@ -97,6 +102,7 @@ class PaperFixedScanReactivePolicy(FixedScanReactivePolicy):
         live_ids = {t.track_id for t in tracks}
         self.assignments = {tid: dev for tid, dev in self.assignments.items() if tid in live_ids and dev in available}
         used = set(self.assignments.values())
+        track_zoom_cache = {}
         for track in tracks:
             if track.track_id in self.assignments:
                 continue
@@ -108,11 +114,15 @@ class PaperFixedScanReactivePolicy(FixedScanReactivePolicy):
                     yaw, pitch = world_to_gimbal_angles(track.position, device)
                 except ValueError:
                     continue
+                zoom = float(np.clip(self.paper_track_zoom, *device.zoom_limits))
+                if not self._reachable(device, yaw, pitch, zoom):
+                    continue
                 cost = abs(angle_delta_deg(yaw, state.yaw_deg)) + abs(pitch - state.pitch_deg)
                 if best is None or cost < best[0]:
-                    best = (cost, key)
+                    best = (cost, key, zoom)
             if best is not None:
                 self.assignments[track.track_id] = best[1]
+                track_zoom_cache[(track.track_id, best[1])] = best[2]
                 used.add(best[1])
         actions = {}
         reverse = {dev: tid for tid, dev in self.assignments.items()}
@@ -126,28 +136,39 @@ class PaperFixedScanReactivePolicy(FixedScanReactivePolicy):
                 lead = np.asarray(track.position) + np.asarray(track.velocity) * min(0.5, self.factory.horizon_s / 2)
                 try:
                     yaw, pitch = world_to_gimbal_angles(lead, device)
-                    zoom = float(np.clip(self.paper_track_zoom, *device.zoom_limits))
-                    actions[key] = Action(key, yaw_deg=yaw, pitch_deg=pitch, zoom=zoom,
-                                          target_ids=(tid,), reason="fixed_reactive_track",
-                                          issued_t=context.t, ttl_s=self.ttl)
-                    continue
+                    zoom = track_zoom_cache.get((tid, key), float(np.clip(self.paper_track_zoom, *device.zoom_limits)))
+                    if self._reachable(device, yaw, pitch, zoom):
+                        actions[key] = Action(key, yaw_deg=yaw, pitch_deg=pitch, zoom=zoom,
+                                              target_ids=(tid,), reason="fixed_reactive_track",
+                                              issued_t=context.t, ttl_s=self.ttl)
+                        continue
                 except ValueError:
                     pass
             if len(positions):
                 partition = positions[rank::max(len(keys), 1)]
                 if len(partition):
-                    index = self.scan_index.get(key, 0) % len(partition)
-                    point = partition[index]
-                    try:
-                        yaw, pitch = world_to_gimbal_angles(point, device)
+                    start = self.scan_index.get(key, 0) % len(partition)
+                    chosen = None
+                    for offset in range(len(partition)):
+                        index = (start + offset) % len(partition)
+                        point = partition[index]
+                        try:
+                            yaw, pitch = world_to_gimbal_angles(point, device)
+                        except ValueError:
+                            continue
+                        zoom = float(np.clip(self.paper_search_zoom, *device.zoom_limits))
+                        if self._reachable(device, yaw, pitch, zoom):
+                            chosen = (index, yaw, pitch, zoom)
+                            break
+                    if chosen is not None:
+                        index, yaw, pitch, zoom = chosen
                         if abs(angle_delta_deg(yaw, state.yaw_deg)) < 1.0 and abs(pitch - state.pitch_deg) < 1.0:
                             self.scan_index[key] = index + 1
-                        zoom = float(np.clip(self.paper_search_zoom, *device.zoom_limits))
+                        else:
+                            self.scan_index[key] = index
                         actions[key] = Action(key, yaw_deg=yaw, pitch_deg=pitch, zoom=zoom,
                                               reason="fixed_partition_scan", issued_t=context.t, ttl_s=self.ttl)
                         continue
-                    except ValueError:
-                        pass
             actions[key] = Action(key, yaw_deg=state.yaw_deg, pitch_deg=state.pitch_deg, zoom=state.zoom,
                                   reason="fixed_hold", issued_t=context.t, ttl_s=self.ttl)
         return Decision(actions, self._diag("fixed_scan", assignments=dict(self.assignments),
