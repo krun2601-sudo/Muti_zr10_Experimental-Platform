@@ -15,6 +15,7 @@ from .statistics import paired_comparisons
 
 
 _TEST_TOKENS = ("S10_heldout", "S11_heldout", "S9a_ood", "S9b_ood", "S7_overload")
+_TEST_SPLITS = ("test_main", "test_ood")
 
 
 def load_manifest(path: str | Path):
@@ -62,6 +63,16 @@ def _require_frozen_input_dir(manifest_path: Path, manifest: dict, key: str,
     return expected
 
 
+def _require_paper_test_unlocked(manifest: dict, split: str) -> None:
+    if split not in _TEST_SPLITS:
+        return
+    if not bool(manifest.get("frozen_inputs", {}).get("paper_test_unlocked", False)):
+        raise ValueError(
+            "paper held-out test remains globally locked: frozen_inputs.paper_test_unlocked "
+            "must be explicitly set true only after all validation-selected inputs are frozen"
+        )
+
+
 def describe_split(manifest_path: str | Path, split: str) -> dict:
     path, manifest = load_manifest(manifest_path)
     spec = manifest.get("splits", {}).get(split)
@@ -75,6 +86,7 @@ def describe_split(manifest_path: str | Path, split: str) -> dict:
         "primary_methods": list(manifest.get("methods", {}).get("primary", [])),
         "parameterized_baselines": list(manifest.get("methods", {}).get("parameterized_baselines", [])),
         "learning_optional": list(manifest.get("methods", {}).get("learning_optional_after_training", [])),
+        "paper_test_unlocked": bool(manifest.get("frozen_inputs", {}).get("paper_test_unlocked", False)),
         "frozen_inputs": copy.deepcopy(manifest.get("frozen_inputs", {})),
         "rules": list(manifest.get("rules", [])),
     }
@@ -193,6 +205,7 @@ def run_split(manifest_path: str | Path, split: str, output: str | Path,
     spec = manifest.get("splits", {}).get(split)
     if not isinstance(spec, dict):
         raise ValueError(f"unknown manifest split: {split}")
+    _require_paper_test_unlocked(manifest, split)
     scenarios = _resolve_scenarios(path, spec.get("scenarios", []))
     seeds = [int(x) for x in spec.get("seeds", [])]
     if not scenarios or not seeds:
@@ -202,7 +215,7 @@ def run_split(manifest_path: str | Path, split: str, output: str | Path,
         raise ValueError("no methods selected")
 
     tuning = manifest.get("baseline_tuning", {})
-    if split in ("test_main", "test_ood"):
+    if split in _TEST_SPLITS:
         if any(isinstance(row, dict) and row.get("split") == split for row in tuning.values()):
             raise ValueError("manifest illegally assigns a test split to tuning")
 
@@ -212,7 +225,7 @@ def run_split(manifest_path: str | Path, split: str, output: str | Path,
     required_learning = sorted(learning_methods.intersection(chosen))
     baseline_selections = {}
     learning_selections = {}
-    if split in ("test_main", "test_ood") and required_baselines:
+    if split in _TEST_SPLITS and required_baselines:
         frozen_baseline_dir = _require_frozen_input_dir(
             path, manifest, "baseline_selection_dir", baseline_selection_dir,
             label="frozen validation selections",
@@ -220,7 +233,7 @@ def run_split(manifest_path: str | Path, split: str, output: str | Path,
         baseline_hashes = manifest.get("frozen_inputs", {}).get("baseline_selection_sha256", {})
         baseline_selections = _read_baseline_selections(
             frozen_baseline_dir, required_baselines, expected_sha256=baseline_hashes)
-    if split in ("test_main", "test_ood") and required_learning:
+    if split in _TEST_SPLITS and required_learning:
         frozen_learning_dir = _require_frozen_input_dir(
             path, manifest, "learning_selection_dir", learning_selection_dir,
             label="validation-selected checkpoints",
