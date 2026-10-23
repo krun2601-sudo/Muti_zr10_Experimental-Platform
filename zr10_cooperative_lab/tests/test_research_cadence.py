@@ -69,6 +69,9 @@ def test_runner_separates_10hz_execution_from_half_second_replanning():
     assert metrics["research_replan_count"] == 2
     assert metrics["research_periodic_replan_count"] == 1
     assert metrics["research_event_replan_count"] == 0
+    # The first replan occurs at exactly t=0.0; this must not be treated as a
+    # missing timestamp merely because 0.0 is false-y in Python.
+    assert metrics["research_replan_frequency_hz"] == 2.0
 
 
 def test_new_anonymous_track_triggers_off_cycle_replan():
