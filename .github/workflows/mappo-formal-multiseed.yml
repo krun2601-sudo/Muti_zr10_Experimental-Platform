@@ -1,0 +1,179 @@
+name: mappo-formal-multiseed
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TRAIN_CONFIGS: >-
+    configs/research/scenarios/S1_single.yaml
+    configs/research/scenarios/S2_staggered.yaml
+    configs/research/scenarios/S3_crossing.yaml
+    configs/research/scenarios/S5_cluster_split.yaml
+    configs/research/scenarios/S6_contention.yaml
+  ENV_SEEDS: >-
+    1001 1002 1003 1004 1005 1006 1007 1008 1009 1010
+    1011 1012 1013 1014 1015 1016 1017 1018 1019 1020
+  VALID_CONFIGS: >-
+    configs/research/scenarios/S4_boundary_handoff.yaml
+    configs/research/scenarios/S8_maneuver.yaml
+  VALID_SEEDS: 2001 2002 2003 2004 2005
+
+jobs:
+  train-validate:
+    name: feature-MAPPO seed ${{ matrix.network_seed }}
+    strategy:
+      fail-fast: false
+      matrix:
+        network_seed: [5101, 5102, 5103, 5104, 5105]
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: zr10_cooperative_lab/pyproject.toml
+      - name: Install frozen research dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy scipy pandas PyYAML opencv-python-headless matplotlib gymnasium pytest
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - name: Verify v2 sparse equivalence and paper test lock
+        working-directory: zr10_cooperative_lab
+        run: |
+          pytest -q \
+            tests/test_candidate_feature_mappo.py \
+            tests/test_candidate_feature_runtime.py \
+            tests/test_mappo_frozen_protocol.py \
+            tests/test_research_protocol.py
+      - name: Train one formal network replica
+        working-directory: zr10_cooperative_lab
+        run: |
+          python -m zr10lab.research.candidate_feature_runtime train \
+            $TRAIN_CONFIGS \
+            --output runs/mappo_formal/seed${{ matrix.network_seed }}/train \
+            --seed ${{ matrix.network_seed }} \
+            --env-seeds $ENV_SEEDS \
+            --updates 300 \
+            --rollout-steps 128 \
+            --checkpoint-every 50 \
+            --device cpu
+      - name: Validate only precommitted eligible updates
+        working-directory: zr10_cooperative_lab
+        run: |
+          ROOT=runs/mappo_formal/seed${{ matrix.network_seed }}
+          CHECKPOINTS=( \
+            "$ROOT/train/feature_mappo_seed${{ matrix.network_seed }}_u0150.pt" \
+            "$ROOT/train/feature_mappo_seed${{ matrix.network_seed }}_u0200.pt" \
+            "$ROOT/train/feature_mappo_seed${{ matrix.network_seed }}_u0250.pt" \
+            "$ROOT/train/feature_mappo_seed${{ matrix.network_seed }}_u0300.pt" \
+          )
+          for checkpoint in "${CHECKPOINTS[@]}"; do
+            test -f "$checkpoint"
+          done
+          python -m zr10lab.research.candidate_feature_mappo select \
+            "${CHECKPOINTS[@]}" \
+            --configs $VALID_CONFIGS \
+            --seeds $VALID_SEEDS \
+            --output "$ROOT/select" \
+            --device cpu
+      - name: Audit per-seed training split and checkpoint identities
+        working-directory: zr10_cooperative_lab
+        run: |
+          ROOT=runs/mappo_formal/seed${{ matrix.network_seed }}
+          ROOT="$ROOT" NETWORK_SEED="${{ matrix.network_seed }}" python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+
+          root = Path(os.environ['ROOT'])
+          seed = int(os.environ['NETWORK_SEED'])
+          index_path = root / 'train' / f'feature_mappo_seed{seed}_training_index.json'
+          index = json.loads(index_path.read_text())
+          assert index['implementation'] == 'candidate_feature_v2'
+          assert index['seed'] == seed
+          assert index['training_env_seeds'] == list(range(1001, 1021))
+          assert len(index['episode_usage']) == 100, (seed, len(index['episode_usage']))
+          assert min(map(int, index['episode_usage'].values())) >= 1
+          eligible = {150, 200, 250, 300}
+          audit = {'network_seed': seed, 'eligible_checkpoints': []}
+          for update in sorted(eligible):
+              checkpoint = root / 'train' / f'feature_mappo_seed{seed}_u{update:04d}.pt'
+              meta_path = Path(str(checkpoint) + '.json')
+              meta = json.loads(meta_path.read_text())
+              assert meta['training_update'] == update and meta['seed'] == seed
+              audit['eligible_checkpoints'].append({
+                  'update': update,
+                  'checkpoint': checkpoint.name,
+                  'checkpoint_sha256': hashlib.sha256(checkpoint.read_bytes()).hexdigest(),
+                  'metadata_sha256': hashlib.sha256(meta_path.read_bytes()).hexdigest(),
+                  'training_pair_count': len(meta.get('episode_usage', {})),
+                  'minimum_uses_per_training_pair': min(map(int, meta.get('episode_usage', {}).values())) if meta.get('episode_usage') else 0,
+              })
+          (root / 'formal_seed_audit.json').write_text(json.dumps(audit, indent=2))
+          PY
+      - name: Upload formal network-seed artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mappo-formal-seed-${{ matrix.network_seed }}
+          path: zr10_cooperative_lab/runs/mappo_formal/seed${{ matrix.network_seed }}
+          retention-days: 90
+          compression-level: 6
+
+  freeze-common-update:
+    name: freeze common validation-selected update
+    needs: train-validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install aggregation dependencies
+        run: |
+          python -m pip install numpy scipy pandas PyYAML opencv-python-headless
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - name: Download all five frozen-seed validation artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: mappo-formal-seed-*
+          path: zr10_cooperative_lab/runs/formal_inputs
+          merge-multiple: false
+      - name: Select one common update and hash-pin every replica
+        working-directory: zr10_cooperative_lab
+        run: |
+          python -m zr10lab.research.mappo_multiseed_select \
+            runs/formal_inputs/mappo-formal-seed-5101 \
+            runs/formal_inputs/mappo-formal-seed-5102 \
+            runs/formal_inputs/mappo-formal-seed-5103 \
+            runs/formal_inputs/mappo-formal-seed-5104 \
+            runs/formal_inputs/mappo-formal-seed-5105 \
+            --output runs/formal_learning_selection \
+            --network-seeds 5101 5102 5103 5104 5105 \
+            --validation-seeds 2001 2002 2003 2004 2005 \
+            --validation-scenarios S4 S8 \
+            --eligible-updates 150 200 250 300 \
+            --expected-training-pairs 100 \
+            --minimum-uses-per-training-pair 1
+          cat runs/formal_learning_selection/common_update_validation_summary.csv
+          cat runs/formal_learning_selection/formal_learning_selection.json
+      - name: Verify no held-out tokens entered learning artifacts
+        working-directory: zr10_cooperative_lab
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = '\n'.join(p.read_text(errors='ignore') for p in Path('runs/formal_learning_selection').rglob('*') if p.is_file())
+          forbidden = ['S10_heldout', 'S11_heldout', 'S9a_ood', 'S9b_ood', 'S7_overload', '3001', '4001']
+          assert not any(token in text for token in forbidden), 'held-out token found in formal learning selection'
+          PY
+      - name: Upload common-update freeze manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: mappo-formal-learning-selection-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/formal_learning_selection
+          retention-days: 90
