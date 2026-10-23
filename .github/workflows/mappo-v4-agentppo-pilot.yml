@@ -1,0 +1,128 @@
+name: mappo-v4-agentppo-pilot
+
+on:
+  push:
+    branches: ["research/ecp-rh-experiments"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  agentwise-gate:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[mappo-v4-pilot]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: zr10_cooperative_lab/pyproject.toml
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy scipy pandas PyYAML opencv-python-headless matplotlib gymnasium pytest
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - name: Verify v4 actor factorization and paper test lock
+        working-directory: zr10_cooperative_lab
+        run: |
+          pytest -q \
+            tests/test_candidate_feature_agentppo_v4.py \
+            tests/test_candidate_feature_reward_v3.py \
+            tests/test_candidate_feature_mappo.py \
+            tests/test_research_protocol.py
+          python - <<'PY'
+          import yaml
+          from pathlib import Path
+          m=yaml.safe_load(Path('configs/research/paper_experiment_manifest.yaml').read_text())
+          assert m['frozen_inputs']['paper_test_unlocked'] is False
+          PY
+      - name: Train short v4 gate on frozen training-only product
+        working-directory: zr10_cooperative_lab
+        run: |
+          python -m zr10lab.research.candidate_feature_agentppo_v4 train \
+            configs/research/scenarios/S1_single.yaml \
+            configs/research/scenarios/S2_staggered.yaml \
+            configs/research/scenarios/S3_crossing.yaml \
+            configs/research/scenarios/S5_cluster_split.yaml \
+            configs/research/scenarios/S6_contention.yaml \
+            --output runs/mappo_v4_gate/train \
+            --seed 5401 \
+            --env-seeds 1001 1002 1003 1004 1005 1006 1007 1008 1009 1010 1011 1012 1013 1014 1015 1016 1017 1018 1019 1020 \
+            --updates 30 \
+            --rollout-steps 128 \
+            --checkpoint-every 10 \
+            --device cpu
+      - name: Validate v4 gate on S4/S8 validation seed 2001 only
+        working-directory: zr10_cooperative_lab
+        run: |
+          CHECKPOINTS=(runs/mappo_v4_gate/train/feature_mappo_seed5401_u*.pt)
+          test "${#CHECKPOINTS[@]}" -eq 3
+          python -m zr10lab.research.candidate_feature_agentppo_v4 select \
+            "${CHECKPOINTS[@]}" \
+            --configs \
+              configs/research/scenarios/S4_boundary_handoff.yaml \
+              configs/research/scenarios/S8_maneuver.yaml \
+            --seeds 2001 \
+            --output runs/mappo_v4_gate/select \
+            --device cpu
+          cat runs/mappo_v4_gate/select/validation_checkpoint_summary.csv
+      - name: Audit deterministic actions and PPO stability
+        working-directory: zr10_cooperative_lab
+        run: |
+          python - <<'PY'
+          import csv, json, re
+          from collections import Counter
+          from pathlib import Path
+
+          root=Path('runs/mappo_v4_gate')
+          index=json.loads((root/'train/feature_mappo_seed5401_training_index.json').read_text())
+          assert index['implementation']=='candidate_feature_v4_agentwise'
+          assert index['actor_update']=='per_agent_clipped_ratio_v1'
+          assert index['training_objective']=='freshness_recovery_v1'
+          assert index['training_env_seeds']==list(range(1001,1021))
+
+          final_meta=json.loads((root/'train/feature_mappo_seed5401_u0030.pt.json').read_text())
+          history=final_meta['history']
+          assert all('clip_fraction' in row and 'ratio_mean' in row for row in history)
+          assert all(0.0 <= float(row['clip_fraction']) <= 1.0 for row in history)
+
+          summary={}
+          for run in (root/'select/validation_runs').iterdir():
+              if not run.is_dir(): continue
+              meta=json.loads((run/'metadata.json').read_text())
+              model=meta['config']['policy']['research']['baselines']['mappo']['model_path']
+              update=int(re.search(r'_u(\d+)\.pt$',model).group(1))
+              with (run/'cycles.csv').open(encoding='utf-8-sig',newline='') as h:
+                  rows=list(csv.DictReader(h))
+              metrics=json.loads(rows[-1]['metrics_json'])
+              kinds=Counter()
+              for row in rows:
+                  diag=json.loads(row.get('diagnostics_json') or '{}')
+                  if not diag.get('replanned'): continue
+                  kinds.update(diag.get('policy',{}).get('selected_kinds') or [])
+              with (run/'research_search.csv').open(encoding='utf-8-sig',newline='') as h:
+                  search=list(csv.DictReader(h))
+              observed=max(int(x['observed_count']) for x in search) if search else 0
+              item=summary.setdefault(update,{'miss':[],'observed':[],'kinds':Counter()})
+              item['miss'].append(float(metrics['research_missed_target_rate']))
+              item['observed'].append(observed); item['kinds'].update(kinds)
+          for update in sorted(summary):
+              item=summary[update]
+              print('update',update,
+                    'miss_mean',sum(item['miss'])/len(item['miss']),
+                    'max_observed',max(item['observed']),
+                    'kinds',dict(item['kinds']))
+          # Diagnostic gate: at least one checkpoint must execute non-hold actions.
+          assert any(sum(v['kinds'][k] for k in ('search','track','shared_track'))>0
+                     for v in summary.values())
+          PY
+      - name: Upload v4 gate artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mappo-v4-agentwise-gate-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/mappo_v4_gate
+          retention-days: 30
