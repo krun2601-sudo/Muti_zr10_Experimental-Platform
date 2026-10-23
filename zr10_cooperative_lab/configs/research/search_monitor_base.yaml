@@ -83,11 +83,11 @@ policy:
       classical_ptz: {track_weight: 4.0, search_weight: 1.0, risk_weight: 2.0, motion_weight: 0.15}
       info_planner: {track_information_weight: 1.0, discovery_weight: 1.0, motion_weight: 0.05}
       ssm_belief: {gamma: 0.92, monitor_weight: 4.0, search_weight: 1.0, motion_weight: 0.08}
-      # Learning baselines receive all 65 search cells, not a top-k truncation.
-      # Eight target slots exceed the frozen scenario load and avoid a target-count
-      # information bottleneck. Training and inference read these same capacities.
-      mappo: {max_targets: 8, top_search_cells: 65, device: cpu}
-      safe_mappo: {max_targets: 8, top_search_cells: 65, device: cpu}
+      # Learning baselines receive all 65 search cells and select from the same
+      # RiskAwarePrimitiveFactory action set used by the paper methods. Padding to
+      # 512 candidates is explicit and never silently truncates a larger set.
+      mappo: {max_targets: 8, top_search_cells: 65, max_candidates: 512, device: cpu}
+      safe_mappo: {max_targets: 8, top_search_cells: 65, max_candidates: 512, device: cpu}
     scenario:
       id: S2-staggered
       roi:
