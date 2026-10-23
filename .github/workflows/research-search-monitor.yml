@@ -235,3 +235,188 @@ jobs:
           name: validation-full-${{ matrix.method }}-seed-${{ matrix.seed }}-${{ github.sha }}
           path: zr10_cooperative_lab/runs/validation_full/${{ matrix.method }}/seed_${{ matrix.seed }}
           retention-days: 30
+
+  paper-test-main-method:
+    if: ${{ contains(github.event.head_commit.message, '[paper-test-main]') }}
+    needs: research-tests
+    strategy:
+      fail-fast: false
+      max-parallel: 7
+      matrix:
+        method: [fixed_scan, greedy, weighted_rh, classical_ptz, info_planner, ssm_belief, ecprh]
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: zr10_cooperative_lab/pyproject.toml
+      - name: Install frozen simulation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy scipy pandas PyYAML opencv-python-headless matplotlib gymnasium
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - name: Verify held-out gate and frozen primary identity
+        working-directory: zr10_cooperative_lab
+        run: |
+          python - <<'PY'
+          import hashlib, json, yaml
+          from pathlib import Path
+          manifest_path=Path('configs/research/paper_experiment_manifest.yaml')
+          m=yaml.safe_load(manifest_path.read_text(encoding='utf-8-sig'))
+          expected=['fixed_scan','greedy','weighted_rh','classical_ptz','info_planner','ssm_belief','ecprh']
+          assert m['frozen_inputs']['paper_test_unlocked'] is True
+          assert m['methods']['primary'] == expected
+          assert set(expected).isdisjoint(set(m['methods'].get('learning_optional_after_training',[])))
+          d=m['pretest_learning_decision']
+          assert d['made_before_any_heldout_run'] is True
+          assert d['main_table']=='omit_optional_learning_baselines'
+          assert d['heldout_splits_used_in_decision'] is False
+          directory=manifest_path.parent / m['frozen_inputs']['baseline_selection_dir']
+          for method,expected_hash in m['frozen_inputs']['baseline_selection_sha256'].items():
+              p=directory/f'selected_{method}.json'
+              assert hashlib.sha256(p.read_bytes()).hexdigest()==expected_hash
+          print(json.dumps({'primary':expected,'pretest_learning_decision':d},indent=2))
+          PY
+      - name: Run one frozen primary-method shard on test_main
+        working-directory: zr10_cooperative_lab
+        env:
+          METHOD: ${{ matrix.method }}
+        run: |
+          python -m zr10lab.research.protocol \
+            --manifest configs/research/paper_experiment_manifest.yaml \
+            --split test_main \
+            --methods "$METHOD" \
+            --output "runs/paper_test_main/$METHOD" \
+            --baseline-selections configs/research/frozen_baselines \
+            --no-paired
+      - name: Audit shard completeness
+        working-directory: zr10_cooperative_lab
+        env:
+          METHOD: ${{ matrix.method }}
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          method=os.environ['METHOD']
+          root=Path('runs/paper_test_main')/method/'test_main'
+          status=json.loads((root/'batch_status.json').read_text())
+          assert status['attempted']==80, status
+          assert status['completed']==80, status
+          assert status['failed']==0, status
+          print(json.dumps(status,indent=2))
+          PY
+      - name: Upload complete frozen method shard
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-test-main-${{ matrix.method }}-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/paper_test_main/${{ matrix.method }}/test_main
+          retention-days: 90
+          compression-level: 6
+
+  paper-test-main-aggregate:
+    if: ${{ contains(github.event.head_commit.message, '[paper-test-main]') }}
+    needs: paper-test-main-method
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install analysis dependencies
+        run: |
+          python -m pip install numpy scipy pandas PyYAML matplotlib
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - name: Download all seven frozen method shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: paper-test-main-*-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/paper_test_inputs
+          merge-multiple: false
+      - name: Merge exactly 560 held-out runs and build summaries
+        working-directory: zr10_cooperative_lab
+        run: |
+          python - <<'PY'
+          import csv, json, math
+          from pathlib import Path
+          import numpy as np
+          import pandas as pd
+
+          inputs=Path('runs/paper_test_inputs')
+          methods=['fixed_scan','greedy','weighted_rh','classical_ptz','info_planner','ssm_belief','ecprh']
+          tables=list(inputs.rglob('run_metrics.csv'))
+          statuses=list(inputs.rglob('batch_status.json'))
+          assert len(tables)==7, [str(p) for p in tables]
+          assert len(statuses)==7, [str(p) for p in statuses]
+          for p in statuses:
+              s=json.loads(p.read_text())
+              assert s['attempted']==80 and s['completed']==80 and s['failed']==0, (p,s)
+          frames=[pd.read_csv(p,encoding='utf-8-sig') for p in tables]
+          df=pd.concat(frames,ignore_index=True,sort=False)
+          assert len(df)==560, len(df)
+          assert set(df['method'])==set(methods), sorted(set(df['method']))
+          keys=df[['scenario','seed','method']].astype(str)
+          assert not keys.duplicated().any()
+          counts=df.groupby('method').size().to_dict()
+          assert counts=={m:80 for m in methods}, counts
+          out=Path('runs/paper_test_main_combined'); out.mkdir(parents=True,exist_ok=True)
+          df.to_csv(out/'run_metrics.csv',index=False,encoding='utf-8-sig')
+
+          metadata={'scenario','method','seed','run_dir','status','config','error'}
+          rows=[]
+          for (scenario,method), group in df.groupby(['scenario','method'],sort=True):
+              for key in df.columns:
+                  if key in metadata: continue
+                  values=pd.to_numeric(group[key],errors='coerce').to_numpy(dtype=float)
+                  values=values[np.isfinite(values)]
+                  if not len(values): continue
+                  mean=float(values.mean()); std=float(values.std(ddof=1)) if len(values)>1 else 0.0
+                  ci=1.96*std/math.sqrt(len(values)) if len(values)>1 else 0.0
+                  rows.append({'scenario':scenario,'method':method,'metric':key,'n':len(values),
+                               'mean':mean,'std':std,'ci95_low':mean-ci,'ci95_high':mean+ci,
+                               'min':float(values.min()),'max':float(values.max())})
+          if rows:
+              fields=sorted({k for r in rows for k in r})
+              with (out/'summary_long.csv').open('w',encoding='utf-8-sig',newline='') as h:
+                  w=csv.DictWriter(h,fieldnames=fields); w.writeheader(); w.writerows(rows)
+          (out/'combined_status.json').write_text(json.dumps({
+              'expected_runs':560,'actual_runs':len(df),'methods':methods,
+              'runs_per_method':counts,'source_status_files':[str(p) for p in statuses],
+          },indent=2))
+          PY
+          python -m zr10lab.research.statistics \
+            runs/paper_test_main_combined/run_metrics.csv \
+            --reference ecprh \
+            --bootstrap 10000 \
+            --output runs/paper_test_main_combined/paired_comparisons.csv
+          python -m zr10lab.research.plots batch \
+            runs/paper_test_main_combined \
+            --output runs/paper_test_main_combined/figures
+      - name: Audit paired sample counts
+        working-directory: zr10_cooperative_lab
+        run: |
+          python - <<'PY'
+          import csv, json
+          from pathlib import Path
+          root=Path('runs/paper_test_main_combined')
+          rows=list(csv.DictReader((root/'paired_comparisons.csv').open(encoding='utf-8-sig',newline='')))
+          assert rows
+          overall=[r for r in rows if r['scope']=='overall']
+          assert overall
+          # 4 scenarios x 20 paired environment seeds for every primary competitor.
+          assert all(int(r['n_pairs'])==80 for r in overall), sorted({r['n_pairs'] for r in overall})
+          status=json.loads((root/'combined_status.json').read_text())
+          assert status['actual_runs']==560
+          print('combined held-out main-test audit OK')
+          PY
+      - name: Upload frozen combined main-test result
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-test-main-combined-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/paper_test_main_combined
+          retention-days: 90
+          compression-level: 6
