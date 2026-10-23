@@ -101,13 +101,12 @@ jobs:
           # actually observe at least one search cell during validation. This does
           # not require good target discovery after only ten updates.
           observed = 0.0
-          for metrics in Path('runs/mappo_pilot/select/validation_runs').rglob('metrics.csv'):
-              with metrics.open(encoding='utf-8-sig', newline='') as handle:
-                  rows = list(csv.DictReader(handle))
-              if rows and 'research_search_observed_cells' in rows[-1]:
-                  value = float(rows[-1]['research_search_observed_cells'])
-                  if math.isfinite(value):
-                      observed = max(observed, value)
+          for table in Path('runs/mappo_pilot/select/validation_runs').rglob('research_search.csv'):
+              with table.open(encoding='utf-8-sig', newline='') as handle:
+                  for row in csv.DictReader(handle):
+                      value = float(row['observed_count'])
+                      if math.isfinite(value):
+                          observed = max(observed, value)
           assert observed > 0.0, 'candidate MAPPO smoke validation never observed a search cell'
           print(f'candidate MAPPO split provenance OK; max observed search cells={observed:g}')
           PY
