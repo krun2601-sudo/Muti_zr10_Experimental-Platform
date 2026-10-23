@@ -8,6 +8,7 @@ import numpy as np
 
 from ..geometry import project_world_point
 from ..models import Detection, Track
+from .sensing_quality import SensingQualityModel
 from .types import PerceptionSnapshot, ResearchTargetStatus, TruthTarget
 
 
@@ -40,9 +41,15 @@ class _Belief:
 class VirtualPerception:
     """Controlled synthetic discovery/tracking layer for scheduler experiments.
 
-    Truth IDs are kept only inside this class.  Policies receive anonymous Track
-    objects.  The layer is intentionally an abstract target tracker, not a claim
+    Truth IDs are kept only inside this class. Policies receive anonymous Track
+    objects. The layer is intentionally an abstract target tracker, not a claim
     that a single optical bearing can uniquely recover range in a real system.
+
+    Importantly, geometric FOV inclusion is not enough. ``discovery_visible`` uses
+    the public virtual discovery-quality threshold, while ``monitor_visible`` uses
+    the stricter continuous-monitoring threshold. This creates an auditable
+    wide-FOV/search versus narrow-FOV/reliable-monitoring tradeoff without claiming
+    measured detector performance for the physical ZR10.
     """
 
     def __init__(self, cfg):
@@ -64,6 +71,7 @@ class VirtualPerception:
                self.initial_covariance_m2, self.coast_timeout_s, self.time_bin_s) < 0 or self.time_bin_s <= 0:
             raise ValueError("research perception noise/timing parameters are invalid")
         self.devices = {d.id: d for d in cfg.active_devices}
+        self.quality = SensingQualityModel(cfg)
         self.reset()
 
     def reset(self) -> None:
@@ -76,8 +84,10 @@ class VirtualPerception:
         self._track_serial += 1
         return f"vtrack-{self._track_serial:04d}"
 
-    def _visible_devices(self, target: TruthTarget, states: dict, readiness: dict) -> tuple[str, ...]:
+    def _effective_devices(self, target: TruthTarget, states: dict, readiness: dict,
+                           mode: str) -> tuple[str, ...]:
         visible = []
+        predicate = self.quality.discovery_valid if mode == "discovery" else self.quality.monitor_valid
         for key, state in states.items():
             ready = readiness.get(key)
             if ready is None or not ready.sensing_valid or float(state.zoom) + 1e-9 < self.min_zoom:
@@ -86,10 +96,11 @@ class VirtualPerception:
             if config is None:
                 continue
             try:
-                if project_world_point(target.position, state, config) is not None:
-                    visible.append(key)
+                geometric = project_world_point(target.position, state, config) is not None
             except ValueError:
                 continue
+            if geometric and predicate(target.position, config, float(state.zoom)):
+                visible.append(key)
         return tuple(sorted(visible))
 
     def _detected_devices(self, t: float, truth_id: str, visible: tuple[str, ...]) -> tuple[str, ...]:
@@ -121,8 +132,6 @@ class VirtualPerception:
         belief.last_t = float(t)
         if observed:
             measured_position, measured_velocity = self._measurement(target, t)
-            # Deterministic light-weight Kalman-like update.  Measurement noise is
-            # explicit so policies receive a useful, non-oracle uncertainty state.
             r = max(self.position_noise_std_m**2, 1e-6)
             p = np.maximum(np.diag(belief.covariance), 1e-9)
             gain = p / (p + r)
@@ -139,15 +148,14 @@ class VirtualPerception:
         tracks: list[Track] = []
         status: list[ResearchTargetStatus] = []
         active_ids = set(truth)
-        # Targets that have exited are retired; their evaluation history belongs to
-        # the evaluator, not the policy-facing tracker.
         for truth_id in set(self._beliefs) - active_ids:
             self._beliefs.pop(truth_id, None)
             self._truth_to_track.pop(truth_id, None)
         for truth_id in sorted(truth):
             target = truth[truth_id]
-            visible = self._visible_devices(target, states, readiness)
-            detected = self._detected_devices(t, truth_id, visible)
+            discovery_visible = self._effective_devices(target, states, readiness, "discovery")
+            monitor_visible = self._effective_devices(target, states, readiness, "monitor")
+            detected = self._detected_devices(t, truth_id, discovery_visible)
             belief = self._update_belief(target, t, bool(detected))
             discovered = belief is not None
             if belief is not None:
@@ -161,8 +169,6 @@ class VirtualPerception:
                     float(belief.last_seen_t), belief.hits, status_name,
                     tuple(detected), 0, measured,
                 ))
-            # Synthetic detections are primarily for the control-center preview and
-            # common logging. local_id never contains truth identity.
             for device_id in detected:
                 device = self.devices[device_id]
                 point = project_world_point(target.position, states[device_id], device)
@@ -180,7 +186,7 @@ class VirtualPerception:
                 track_id=None if belief is None else belief.track_id,
                 active=True,
                 discovered=discovered,
-                visible_devices=visible,
+                visible_devices=monitor_visible,
                 sensing_devices=detected,
                 discovery_t=None if belief is None else belief.discovery_t,
                 current_loss_gap_s=float(current_gap),
