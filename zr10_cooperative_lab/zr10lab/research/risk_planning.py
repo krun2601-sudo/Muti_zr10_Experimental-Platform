@@ -6,27 +6,31 @@ import numpy as np
 
 from ..geometry import mount_rotation, world_to_gimbal_angles
 from .planning import PrimitiveFactory, PredictedTrack, _half_fov_deg, angle_delta_deg
+from .sensing_quality import SensingQualityModel
 
 
 class RiskAwarePrimitiveFactory(PrimitiveFactory):
-    """Primitive factory with first-order A/E covariance propagation.
+    """Primitive factory with first-order A/E covariance and effective quality.
 
     For a predicted world position ``p ~ N(mu, P)``, the local gimbal coordinates
-    are ``q = R_mount^T (p-o) = [x,y,z]``.  The local pointing angles are
+    are ``q = R_mount^T (p-o) = [x,y,z]``. The local pointing angles are
 
         A = atan2(y, x),
         E = atan2(z, sqrt(x^2+y^2)).
 
     Their analytic Jacobian is propagated through the world covariance to obtain
-    separate ``sigma_A`` and ``sigma_E``.  A two-sided Gaussian envelope is then
+    separate ``sigma_A`` and ``sigma_E``. A two-sided Gaussian envelope is then
     combined with the configured inter-sample motion and fixed FOV margins.
 
-    The guarantee is explicitly local/conditional: it relies on the first-order
-    linearization and the configured approximately Gaussian position belief.  Near
-    the gimbal vertical singularity (horizontal range approximately zero), the
-    angular uncertainty is treated as unbounded rather than pretending the
-    linearization is reliable.
+    Geometric/risk containment is necessary but not sufficient: target-monitoring
+    primitives must also meet the common virtual monitoring-quality threshold,
+    while search-cell coverage must meet the discovery-quality threshold. Hence all
+    paper methods face the same zoom/range sensing tradeoff.
     """
+
+    def __init__(self, cfg):
+        super().__init__(cfg)
+        self.quality = SensingQualityModel(cfg)
 
     @staticmethod
     def angular_std_deg(point, covariance, device) -> tuple[float, float]:
@@ -36,8 +40,6 @@ class RiskAwarePrimitiveFactory(PrimitiveFactory):
             raise ValueError("point/covariance must have shapes (3,) and (3,3)")
         if not np.all(np.isfinite(point)) or not np.all(np.isfinite(covariance)):
             raise ValueError("point/covariance must be finite")
-        # Symmetrize harmless floating-point asymmetry; a strongly indefinite
-        # covariance is rejected rather than silently converted into confidence.
         covariance = 0.5 * (covariance + covariance.T)
         eig = np.linalg.eigvalsh(covariance)
         if eig.min() < -1e-8:
@@ -58,7 +60,6 @@ class RiskAwarePrimitiveFactory(PrimitiveFactory):
             [-y / rho2, x / rho2, 0.0],
             [-z * x / (rho * r2), -z * y / (rho * r2), rho / r2],
         ], dtype=float)
-        # q = R^T p + const, hence d(angle)/d(world p) = J_local R^T.
         j_world = j_local @ r_mount.T
         angular_cov = j_world @ covariance @ j_world.T
         angular_cov = 0.5 * (angular_cov + angular_cov.T)
@@ -88,14 +89,23 @@ class RiskAwarePrimitiveFactory(PrimitiveFactory):
                 except ValueError:
                     continue
                 distance = max(float(np.linalg.norm(point - origin)), 1e-6)
-                # Bound between planning samples by a conservative angular-rate
-                # surrogate.  This term is deterministic, separate from belief
-                # uncertainty, so the no-uncertainty ablation does not remove it.
                 angular_speed = math.degrees(math.atan2(float(track.speeds[h]), distance))
                 inter = angular_speed * self.slot_s * self.inter_sample_factor
                 margin_yaw = kappa * sigma_yaw + inter + self.fov_margin_deg
                 margin_pitch = kappa * sigma_pitch + inter + self.fov_margin_deg
-                if (abs(angle_delta_deg(target_yaw, yaw)) + margin_yaw <= half_yaw and
-                        abs(target_pitch - pitch) + margin_pitch <= half_pitch):
+                contained = (abs(angle_delta_deg(target_yaw, yaw)) + margin_yaw <= half_yaw and
+                             abs(target_pitch - pitch) + margin_pitch <= half_pitch)
+                if contained and self.quality.monitor_valid(point, device, zoom):
                     matrix[j, h] = True
+        return matrix
+
+    def _search_coverage(self, device, yaw, pitch, zoom, ready_slot, search_positions) -> np.ndarray:
+        matrix = super()._search_coverage(device, yaw, pitch, zoom, ready_slot, search_positions)
+        if not len(search_positions) or not matrix.any():
+            return matrix
+        quality = np.fromiter(
+            (self.quality.discovery_valid(point, device, zoom) for point in search_positions),
+            dtype=bool, count=len(search_positions),
+        )
+        matrix &= quality[:, None]
         return matrix
