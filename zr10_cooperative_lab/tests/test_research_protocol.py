@@ -32,6 +32,15 @@ def test_frozen_manifest_has_disjoint_scenario_and_seed_splits():
     assert validation.isdisjoint(tests)
 
 
+def test_manifest_pins_baselines_but_keeps_learning_test_locked():
+    path = Path("configs/research/paper_experiment_manifest.yaml")
+    manifest = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
+    frozen = manifest["frozen_inputs"]
+    assert frozen["baseline_selection_dir"] == "frozen_baselines"
+    assert "learning_selection_dir" not in frozen
+    assert (path.parent / frozen["baseline_selection_dir"]).is_dir()
+
+
 def test_ablation_override_does_not_replace_heldout_scenario():
     scenario = load_config("configs/research/scenarios/S10_heldout_mixed.yaml")
     original = scenario.policy["research"]["scenario"]["id"]
@@ -115,6 +124,18 @@ def test_test_split_refuses_parameterized_baseline_without_validation_selection(
         )
 
 
+def test_test_split_refuses_non_manifest_baseline_selection_directory(tmp_path):
+    fake = tmp_path / "replacement"
+    fake.mkdir()
+    with pytest.raises(ValueError, match="does not match frozen manifest identity"):
+        run_split(
+            "configs/research/paper_experiment_manifest.yaml",
+            "test_main", tmp_path / "out",
+            methods=["weighted_rh"], paired=False,
+            baseline_selection_dir=fake,
+        )
+
+
 def test_test_split_refuses_learning_method_without_validation_checkpoint(tmp_path):
     with pytest.raises(ValueError, match="validation-selected checkpoints"):
         run_split(
@@ -122,4 +143,16 @@ def test_test_split_refuses_learning_method_without_validation_checkpoint(tmp_pa
             "test_main", tmp_path,
             methods=["mappo"], paired=False,
             learning_selection_dir=None,
+        )
+
+
+def test_arbitrary_learning_directory_cannot_unlock_test_before_manifest_freeze(tmp_path):
+    fake = tmp_path / "candidate_checkpoints"
+    fake.mkdir()
+    with pytest.raises(ValueError, match="no frozen validation-selected checkpoints"):
+        run_split(
+            "configs/research/paper_experiment_manifest.yaml",
+            "test_main", tmp_path / "out",
+            methods=["mappo"], paired=False,
+            learning_selection_dir=fake,
         )
