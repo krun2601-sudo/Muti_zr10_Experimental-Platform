@@ -26,14 +26,14 @@ jobs:
           python -m pip install numpy scipy pandas PyYAML opencv-python-headless matplotlib gymnasium pytest
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
           python -m pip install -e ./zr10_cooperative_lab --no-deps
-      - name: Verify feature-scored candidate representation
+      - name: Verify feature-scored candidate representation and sparse equivalence
         working-directory: zr10_cooperative_lab
         run: |
           pytest -q tests/test_candidate_feature_mappo.py tests/test_mappo_frozen_protocol.py tests/test_research_protocol.py
-      - name: Train feature-scored smoke on frozen training-only product
+      - name: Train sparse feature-scored smoke on frozen training-only product
         working-directory: zr10_cooperative_lab
         run: |
-          python -m zr10lab.research.candidate_feature_mappo train \
+          python -m zr10lab.research.candidate_feature_runtime train \
             configs/research/scenarios/S1_single.yaml \
             configs/research/scenarios/S2_staggered.yaml \
             configs/research/scenarios/S3_crossing.yaml \
@@ -60,19 +60,31 @@ jobs:
             --device cpu
           cat runs/mappo_feature_smoke/select/validation_checkpoint_summary.csv
           cat runs/mappo_feature_smoke/select/selected_checkpoint.json
-      - name: Audit feature-scored smoke provenance
+      - name: Audit feature-scored smoke provenance and behavior
         working-directory: zr10_cooperative_lab
         run: |
           python - <<'PY'
-          import json
+          import csv, json, math
           from pathlib import Path
           index = json.loads(Path('runs/mappo_feature_smoke/train/feature_mappo_seed5201_training_index.json').read_text())
           assert index['implementation'] == 'candidate_feature_v2'
           assert index['training_env_seeds'] == [1001,1002,1003,1004,1005]
           meta = json.loads(Path(index['checkpoints'][-1] + '.json').read_text())
           assert meta['candidate_feature_dim'] == 29
+          fractions = meta['history'][-1]['action_kind_fraction']
+          assert abs(sum(fractions.values()) - 1.0) < 1e-6
+          assert fractions['search'] + fractions['track'] + fractions['shared_track'] > 0.0
+          observed = 0.0
+          for table in Path('runs/mappo_feature_smoke/select/validation_runs').rglob('research_search.csv'):
+              with table.open(encoding='utf-8-sig', newline='') as handle:
+                  for row in csv.DictReader(handle):
+                      value = float(row['observed_count'])
+                      if math.isfinite(value):
+                          observed = max(observed, value)
+          assert observed > 0.0, 'feature MAPPO smoke validation never observed a search cell'
           print('episodes_started=', meta['episodes_started'])
-          print('last_action_kind_fraction=', meta['history'][-1]['action_kind_fraction'])
+          print('last_action_kind_fraction=', fractions)
+          print('max_observed_search_cells=', observed)
           forbidden = ['S10_heldout', 'S11_heldout', 'S9a_ood', 'S9b_ood', 'S7_overload']
           assert not any(token in json.dumps(index) for token in forbidden)
           PY
