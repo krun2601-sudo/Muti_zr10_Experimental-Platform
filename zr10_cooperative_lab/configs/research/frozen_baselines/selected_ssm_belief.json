@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "method": "ssm_belief",
+  "selection_rule": "lexicographic validation means over S4/S8 and seeds 2001-2005: missed-target rate, censored detection-delay P95, post-discovery total loss, maximum loss gap, revisit-age P95",
+  "selection_metrics": [
+    "research_missed_target_rate",
+    "research_detection_delay_censored_p95_s",
+    "research_total_loss_s",
+    "research_max_loss_gap_s",
+    "research_revisit_age_p95_s"
+  ],
+  "validation_configs": [
+    "scenarios/S4_boundary_handoff.yaml",
+    "scenarios/S8_maneuver.yaml"
+  ],
+  "validation_seeds": [2001, 2002, 2003, 2004, 2005],
+  "evaluated_parameter_count": 24,
+  "runs_per_parameter_tuple": 10,
+  "selected_params": {
+    "gamma": 0.98,
+    "monitor_weight": 2.0,
+    "motion_weight": 0.04,
+    "search_weight": 2.0
+  },
+  "selected_summary": {
+    "runs": 10,
+    "research_missed_target_rate": 0.0,
+    "research_detection_delay_censored_p95_s": 1.9055000000000117,
+    "research_total_loss_s": 15.999999999999966,
+    "research_max_loss_gap_s": 2.7700000000000005,
+    "research_revisit_age_p95_s": 9.219999999999473
+  },
+  "provenance": {
+    "workflow_run_id": 39903983283,
+    "data_generation_sha": "0bd57b010cce7f512c60022b89a9deb627328421",
+    "branch": "research/ecp-rh-experiments",
+    "parameter_sample_seed": 20261022,
+    "artifacts": [
+      {"seed": 2001, "artifact_id": 12480712091, "sha256": "c07743fc270a9e66cfca5d623621ebc9184df92c2ad9d268ef6c6b8eefccf0d2"},
+      {"seed": 2002, "artifact_id": 12480921358, "sha256": "dc8b1231fb0c465073aa582412c0cda4c18895afb829d4f2b8ec6001d8633596"},
+      {"seed": 2003, "artifact_id": 12480289186, "sha256": "b67a005b87c69e2a92ecc9e558122e6480c9941b4512fb2dc1d1328cff460f9c"},
+      {"seed": 2004, "artifact_id": 12480730051, "sha256": "a3d8d3415d509d07f87912690cdbc58fc5d90db6c8f72ebde35e2381eda324aa"},
+      {"seed": 2005, "artifact_id": 12480582993, "sha256": "bd0f6782998e94ce8cb919858345c52aef879ac6b1ebde87f5cf24d1dc05cf27"}
+    ],
+    "test_splits_used_for_selection": false
+  }
+}
