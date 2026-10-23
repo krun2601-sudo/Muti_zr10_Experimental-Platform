@@ -33,9 +33,10 @@ def build_candidate_mappo_policy(cfg, *, safe: bool = False):
     if implementation == "candidate_categorical_v1":
         return CandidateSafeMAPPOPolicy(cfg) if safe else CandidateMAPPOPolicy(cfg)
     if implementation == "candidate_feature_v2":
-        from .candidate_feature_mappo import (
-            FeatureCandidateMAPPOPolicy,
-            FeatureCandidateSafeMAPPOPolicy,
+        from .candidate_feature_runtime import (
+            SparseFeatureCandidateMAPPOPolicy,
+            SparseFeatureCandidateSafeMAPPOPolicy,
         )
-        return FeatureCandidateSafeMAPPOPolicy(cfg) if safe else FeatureCandidateMAPPOPolicy(cfg)
+        return (SparseFeatureCandidateSafeMAPPOPolicy(cfg) if safe
+                else SparseFeatureCandidateMAPPOPolicy(cfg))
     raise ValueError(f"unsupported MAPPO checkpoint implementation: {implementation}")
