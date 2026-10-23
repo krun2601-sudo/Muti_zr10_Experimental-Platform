@@ -1,0 +1,78 @@
+name: mappo-pilot
+
+on:
+  push:
+    branches: ["research/ecp-rh-experiments"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mappo-pipeline-pilot:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[mappo-pilot]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: zr10_cooperative_lab/pyproject.toml
+      - name: Install research and CPU PyTorch dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy scipy PyYAML opencv-python-headless matplotlib gymnasium
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - name: Train short MAPPO pipeline pilot on training-only scenarios
+        working-directory: zr10_cooperative_lab
+        run: |
+          python -m zr10lab.research.mappo_protocol train \
+            configs/research/scenarios/S1_single.yaml \
+            configs/research/scenarios/S2_staggered.yaml \
+            configs/research/scenarios/S3_crossing.yaml \
+            configs/research/scenarios/S5_cluster_split.yaml \
+            configs/research/scenarios/S6_contention.yaml \
+            --output runs/mappo_pilot/train \
+            --seed 5101 \
+            --updates 10 \
+            --rollout-steps 64 \
+            --checkpoint-every 5 \
+            --device cpu
+          ls -lh runs/mappo_pilot/train
+      - name: Select pilot checkpoint on validation-only S4/S8
+        working-directory: zr10_cooperative_lab
+        run: |
+          CHECKPOINTS=(runs/mappo_pilot/train/mappo_seed5101_u*.pt)
+          python -m zr10lab.research.mappo_protocol select \
+            "${CHECKPOINTS[@]}" \
+            --configs \
+              configs/research/scenarios/S4_boundary_handoff.yaml \
+              configs/research/scenarios/S8_maneuver.yaml \
+            --seeds 2001 \
+            --output runs/mappo_pilot/select \
+            --device cpu
+          cat runs/mappo_pilot/select/selected_checkpoint.json
+      - name: Verify pilot provenance contains no held-out scenario
+        working-directory: zr10_cooperative_lab
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          train = json.loads(Path('runs/mappo_pilot/train/mappo_seed5101_training_index.json').read_text())
+          selected = json.loads(Path('runs/mappo_pilot/select/selected_checkpoint.json').read_text())
+          text = json.dumps({'train': train, 'selected': selected})
+          forbidden = ['S10_heldout', 'S11_heldout', 'S9a_ood', 'S9b_ood', 'S7_overload']
+          assert not any(token in text for token in forbidden), text
+          assert all(token in text for token in ['S1_single', 'S2_staggered', 'S3_crossing', 'S5_cluster_split', 'S6_contention'])
+          assert 'S4_boundary_handoff' in text and 'S8_maneuver' in text
+          print('MAPPO pilot split provenance OK')
+          PY
+      - name: Upload MAPPO pilot outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: mappo-pilot-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/mappo_pilot
+          retention-days: 30
