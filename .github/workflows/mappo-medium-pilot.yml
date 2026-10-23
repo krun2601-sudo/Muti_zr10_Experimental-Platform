@@ -26,83 +26,133 @@ jobs:
           python -m pip install numpy scipy pandas PyYAML opencv-python-headless matplotlib gymnasium pytest
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
           python -m pip install -e ./zr10_cooperative_lab --no-deps
-      - name: Recheck candidate MAPPO protocol
-        working-directory: zr10_cooperative_lab
-        run: pytest -q tests/test_mappo_frozen_protocol.py tests/test_research_protocol.py
-      - name: Train medium candidate MAPPO pilot on frozen training product
+      - name: Recheck v2 candidate MAPPO protocol and sparse equivalence
         working-directory: zr10_cooperative_lab
         run: |
-          python -m zr10lab.research.candidate_mappo train \
+          pytest -q tests/test_candidate_feature_mappo.py tests/test_mappo_frozen_protocol.py tests/test_research_protocol.py
+          python - <<'PY'
+          import yaml
+          from pathlib import Path
+          manifest = yaml.safe_load(Path('configs/research/paper_experiment_manifest.yaml').read_text())
+          assert manifest['frozen_inputs']['paper_test_unlocked'] is False
+          assert manifest['splits']['train_learning_only']['seeds'] == list(range(1001, 1021))
+          assert manifest['splits']['validation_only']['seeds'] == [2001,2002,2003,2004,2005]
+          print('frozen pre-test protocol OK')
+          PY
+      - name: Train v2 sparse medium pilot on frozen training product
+        working-directory: zr10_cooperative_lab
+        run: |
+          python -m zr10lab.research.candidate_feature_runtime train \
             configs/research/scenarios/S1_single.yaml \
             configs/research/scenarios/S2_staggered.yaml \
             configs/research/scenarios/S3_crossing.yaml \
             configs/research/scenarios/S5_cluster_split.yaml \
             configs/research/scenarios/S6_contention.yaml \
-            --output runs/mappo_medium/train \
-            --seed 5101 \
+            --output runs/mappo_feature_medium/train \
+            --seed 5201 \
             --env-seeds 1001 1002 1003 1004 1005 1006 1007 1008 1009 1010 1011 1012 1013 1014 1015 1016 1017 1018 1019 1020 \
-            --updates 100 \
+            --updates 125 \
             --rollout-steps 128 \
             --checkpoint-every 25 \
             --device cpu
       - name: Validate every checkpoint on full frozen validation split
         working-directory: zr10_cooperative_lab
         run: |
-          CHECKPOINTS=(runs/mappo_medium/train/candidate_mappo_seed5101_u*.pt)
-          python -m zr10lab.research.candidate_mappo select \
+          CHECKPOINTS=(runs/mappo_feature_medium/train/feature_mappo_seed5201_u*.pt)
+          test "${#CHECKPOINTS[@]}" -eq 5
+          python -m zr10lab.research.candidate_feature_mappo select \
             "${CHECKPOINTS[@]}" \
             --configs \
               configs/research/scenarios/S4_boundary_handoff.yaml \
               configs/research/scenarios/S8_maneuver.yaml \
             --seeds 2001 2002 2003 2004 2005 \
-            --output runs/mappo_medium/select \
+            --output runs/mappo_feature_medium/select \
             --device cpu
           echo '=== CHECKPOINT SUMMARY ==='
-          cat runs/mappo_medium/select/validation_checkpoint_summary.csv
+          cat runs/mappo_feature_medium/select/validation_checkpoint_summary.csv
           echo '=== SELECTED ==='
-          cat runs/mappo_medium/select/selected_checkpoint.json
-      - name: Summarize training history, episode coverage and split provenance
+          cat runs/mappo_feature_medium/select/selected_checkpoint.json
+      - name: Audit learning trend, training-product coverage and validation behavior
         working-directory: zr10_cooperative_lab
         run: |
           python - <<'PY'
           import csv, json, math
           from pathlib import Path
+          import pandas as pd
 
-          index = json.loads(Path('runs/mappo_medium/train/candidate_mappo_seed5101_training_index.json').read_text())
-          assert index['implementation'] == 'candidate_categorical_v1'
+          root = Path('runs/mappo_feature_medium')
+          index = json.loads((root/'train/feature_mappo_seed5201_training_index.json').read_text())
+          assert index['implementation'] == 'candidate_feature_v2'
           assert index['training_env_seeds'] == list(range(1001, 1021))
           assert index['max_targets'] == 8 and index['top_search_cells'] == 65
-          assert index['max_candidates'] == 512
+          assert index['max_candidates'] == 512 and index['candidate_feature_dim'] == 29
+          assert len(index['checkpoints']) == 5
 
           final_meta = json.loads(Path(index['checkpoints'][-1] + '.json').read_text())
+          assert final_meta['training_update'] == 125
           hist = final_meta['history']
-          for lo, hi in [(0, 24), (25, 49), (50, 74), (75, 99)]:
+          assert len(hist) == 125
+          for lo, hi in [(0,24),(25,49),(50,74),(75,99),(100,124)]:
               rows = hist[lo:hi+1]
-              r = sum(x['reward_mean'] for x in rows) / len(rows)
-              c = sum(x['cost_mean'] for x in rows) / len(rows)
-              print(f'updates {lo+1:03d}-{hi+1:03d}: reward_mean={r:.6f}, cost_mean={c:.6f}')
+              reward = sum(x['reward_mean'] for x in rows)/len(rows)
+              cost = sum(x['cost_mean'] for x in rows)/len(rows)
+              kinds = {k: sum(x['action_kind_fraction'][k] for x in rows)/len(rows)
+                       for k in ['hold','search','track','shared_track']}
+              print(f'updates {lo+1:03d}-{hi+1:03d}: reward={reward:.6f} cost={cost:.6f} kinds={kinds}')
 
           usage = final_meta.get('episode_usage', {})
-          print(f"episodes_started={final_meta.get('episodes_started', 0)}, unique_scenario_seed_pairs={len(usage)}")
-          if usage:
-              print('episode_usage=' + json.dumps(usage, sort_keys=True))
+          expected = {f'{scenario}|{seed}' for seed in range(1001,1021)
+                      for scenario in ['S1_single','S2_staggered','S3_crossing','S5_cluster_split','S6_contention']}
+          seen = set(usage)
+          missing = sorted(expected-seen)
+          print(f"episodes_started={final_meta.get('episodes_started',0)} unique_pairs={len(seen)}/100")
+          print('missing_pairs=' + json.dumps(missing))
+          (root/'training_product_audit.json').write_text(json.dumps({
+              'episodes_started': final_meta.get('episodes_started',0),
+              'unique_pairs': len(seen), 'expected_pairs': 100,
+              'missing_pairs': missing, 'episode_usage': usage,
+          }, indent=2))
+
+          summary = pd.read_csv(root/'select/validation_checkpoint_summary.csv')
+          assert len(summary) == 5
+          print('validation_learning_curve=')
+          print(summary.to_string(index=False))
 
           observed = 0.0
-          for table in Path('runs/mappo_medium/select/validation_runs').rglob('research_search.csv'):
+          replans = []
+          kind_counts = {'hold':0,'search':0,'track':0,'shared_track':0}
+          decision_ms = []
+          for table in (root/'select/validation_runs').rglob('research_search.csv'):
               with table.open(encoding='utf-8-sig', newline='') as handle:
                   for row in csv.DictReader(handle):
                       value = float(row['observed_count'])
-                      if math.isfinite(value):
-                          observed = max(observed, value)
+                      if math.isfinite(value): observed=max(observed,value)
+          for table in (root/'select/validation_runs').rglob('cycles.csv'):
+              with table.open(encoding='utf-8-sig', newline='') as handle:
+                  for row in csv.DictReader(handle):
+                      diag=json.loads(row.get('diagnostics_json') or '{}')
+                      policy=diag.get('policy',{})
+                      if policy.get('replan_reason') == 'cached': continue
+                      kinds=policy.get('selected_kinds') or []
+                      if not kinds: continue
+                      for kind in kinds:
+                          if kind in kind_counts: kind_counts[kind]+=1
+                      decision_ms.append(float(policy.get('decision_compute_ms',0.0)))
           print(f'max_validation_observed_cells={observed:g}')
+          print('validation_action_kinds=' + json.dumps(kind_counts, sort_keys=True))
+          if decision_ms:
+              decision_ms.sort()
+              p95=decision_ms[min(len(decision_ms)-1, math.ceil(.95*len(decision_ms))-1)]
+              print(f'decision_ms_mean={sum(decision_ms)/len(decision_ms):.3f} p95={p95:.3f} max={max(decision_ms):.3f}')
 
           text = json.dumps(index)
-          forbidden = ['S10_heldout', 'S11_heldout', 'S9a_ood', 'S9b_ood', 'S7_overload']
+          forbidden = ['S10_heldout','S11_heldout','S9a_ood','S9b_ood','S7_overload']
           assert not any(token in text for token in forbidden)
+          assert observed > 0.0
           PY
-      - name: Upload medium candidate MAPPO pilot
+      - name: Upload v2 medium pilot
         uses: actions/upload-artifact@v4
         with:
-          name: candidate-mappo-medium-${{ github.sha }}
-          path: zr10_cooperative_lab/runs/mappo_medium
+          name: candidate-feature-mappo-medium-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/mappo_feature_medium
           retention-days: 30
