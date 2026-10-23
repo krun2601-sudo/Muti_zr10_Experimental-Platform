@@ -64,13 +64,18 @@ def test_selects_one_common_update_across_all_network_seeds(tmp_path):
         expected_network_seeds=[5101, 5102],
         expected_validation_seeds=[2001, 2002],
         expected_scenarios=["S4", "S8"],
+        expected_training_pairs=100,
+        minimum_uses_per_training_pair=1,
     )
     assert result["selected_update"] == 100  # pooled missed means: u50=.4, u100=.1
     assert [x["network_seed"] for x in result["replicas"]] == [5101, 5102]
     assert {x["checkpoint"].split("_u")[-1] for x in result["replicas"]} == {"0100.pt"}
+    assert result["coverage_qualified_updates"] == [50, 100]
     for replica in result["replicas"]:
         data = Path(replica["checkpoint"]).read_bytes()
         assert hashlib.sha256(data).hexdigest() == replica["checkpoint_sha256"]
+        assert replica["episode_usage_count"] == 100
+        assert replica["minimum_uses_per_training_pair"] >= 1
 
 
 def test_rejects_asymmetric_validation_split(tmp_path):
@@ -87,3 +92,23 @@ def test_rejects_different_checkpoint_updates(tmp_path):
     _write_seed(b, 5102, {50: 0.0, 75: 0.0})
     with pytest.raises(ValueError, match="checkpoint update sets differ"):
         aggregate_common_update([a, b], tmp_path / "out")
+
+
+def test_rejects_validation_best_update_without_full_training_coverage(tmp_path):
+    a = tmp_path / "seed5101"; b = tmp_path / "seed5102"
+    _write_seed(a, 5101, {100: 0.0})
+    _write_seed(b, 5102, {100: 0.0})
+
+    # Corrupt one otherwise excellent checkpoint so it has only 99/100 frozen
+    # training pairs. Validation quality must never override this protocol failure.
+    metadata = b / "train" / "feature_mappo_seed5102_u0100.pt.json"
+    doc = json.loads(metadata.read_text(encoding="utf-8"))
+    doc["episode_usage"].pop("pair-99")
+    metadata.write_text(json.dumps(doc), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="no common checkpoint update satisfies"):
+        aggregate_common_update(
+            [a, b], tmp_path / "out",
+            expected_training_pairs=100,
+            minimum_uses_per_training_pair=1,
+        )
