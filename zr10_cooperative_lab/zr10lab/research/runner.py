@@ -29,16 +29,14 @@ def _policy(method: str, cfg):
     # method. Keeping cadence outside policies guarantees identical periodic/event
     # decision opportunities in GUI, batch and headless execution.
     if method in ("mappo", "safe_mappo"):
-        from .candidate_mappo import CandidateMAPPOPolicy, CandidateSafeMAPPOPolicy
-        return CandidateMAPPOPolicy(cfg) if method == "mappo" else CandidateSafeMAPPOPolicy(cfg)
+        from .candidate_mappo_dispatch import build_candidate_mappo_policy
+        return build_candidate_mappo_policy(cfg, safe=(method == "safe_mappo"))
     return build_paper_policy(method, cfg)
 
 
 def _policy_builder_name(method: str) -> str:
-    if method == "mappo":
-        return "zr10lab.research.candidate_mappo:CandidateMAPPOPolicy"
-    if method == "safe_mappo":
-        return "zr10lab.research.candidate_mappo:CandidateSafeMAPPOPolicy"
+    if method in ("mappo", "safe_mappo"):
+        return "zr10lab.research.candidate_mappo_dispatch:build_candidate_mappo_policy"
     return "zr10lab.research.paper_policies:build_paper_policy"
 
 
@@ -50,8 +48,9 @@ def run_research_simulation(cfg, method="ecprh", output=None, seed=None,
     owns target truth/perception/evaluation, preserving the exact same task semantics
     later used by the hardware-mirror control center. Non-learning methods are
     constructed exclusively through ``build_paper_policy`` so batch, GUI and mirror
-    cannot silently drift to different implementations. MAPPO uses the same
-    RiskAwarePrimitiveFactory candidate actions as the paper methods.
+    cannot silently drift to different implementations. MAPPO dispatches by the
+    frozen checkpoint implementation while using the same RiskAwarePrimitiveFactory
+    candidate actions as the paper methods.
     """
     cfg = prepare_research_config(cfg, method, seed)
     world = SimulationWorld(cfg)
