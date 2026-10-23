@@ -56,14 +56,15 @@ def test_virtual_perception_exposes_anonymous_track_not_truth_id():
     device = c.active_devices[0]
     target = TruthTarget("private-secret-target", 1.0, (120.0, -25.0, 58.0), (1.0, 0.0, 0.0))
     yaw, pitch = world_to_gimbal_angles(target.position, device)
-    states = {device.id: Telemetry(device.id, 1.0, yaw, pitch, zoom=1.0, connected=True)}
+    # Use a quality-valid discovery zoom. The purpose of this test is anonymity,
+    # not the legacy assumption that 1x geometric inclusion guarantees detection.
+    states = {device.id: Telemetry(device.id, 1.0, yaw, pitch, zoom=3.0, connected=True)}
     readiness = {device.id: DeviceReadiness(device.id, True, 0.0, "ready")}
     snap = perception.step(1.0, {target.truth_id: target}, states, readiness)
     assert len(snap.tracks) == 1
     assert snap.tracks[0].track_id.startswith("vtrack-")
     assert target.truth_id not in repr(snap.tracks[0])
     assert all(target.truth_id not in repr(d) for d in snap.detections)
-    # The mapping exists only behind an explicit private evaluation hook.
     assert perception.private_truth_to_track()[target.truth_id] == snap.tracks[0].track_id
 
 
@@ -95,7 +96,6 @@ def _primitive(index, kind, visibility, search, cost=0.0):
 
 
 def test_lexicographic_level1_cannot_trade_loss_for_search():
-    # One camera must choose either target continuity OR fresh-area search.
     keep = _primitive(0, "track", [[1]], [[0]], 1.0)
     search = _primitive(1, "search", [[0]], [[1]], 0.0)
     ps = PrimitiveSet(by_device={"cam": (keep, search)}, flat=(keep, search),
@@ -106,8 +106,6 @@ def test_lexicographic_level1_cannot_trade_loss_for_search():
     selected, lex = problem.solve_lexicographic()
     assert lex.level1 == pytest.approx(0.0, abs=1e-7)
     assert selected[0].kind == "track"
-    # Deliberately low finite loss weight and high search reward make weighted MPC
-    # accept a visibility loss; this is the exact trade-off ECP-RH eliminates.
     weighted_selected, weighted = problem.solve_weighted(loss_weight=0.01, search_weight=100.0,
                                                           motion_weight=0.0)
     assert weighted.level1 is not None and weighted.level1 >= lex.level1 - 1e-8
