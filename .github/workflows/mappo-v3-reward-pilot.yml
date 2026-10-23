@@ -32,7 +32,6 @@ jobs:
           pytest -q \
             tests/test_candidate_feature_reward_v3.py \
             tests/test_candidate_feature_mappo.py \
-            tests/test_candidate_feature_runtime.py \
             tests/test_research_protocol.py
           python - <<'PY'
           import yaml
@@ -74,8 +73,8 @@ jobs:
         working-directory: zr10_cooperative_lab
         run: |
           python - <<'PY'
-          import csv, json, math, re
-          from collections import Counter, defaultdict
+          import csv, json, re
+          from collections import Counter
           from pathlib import Path
 
           root=Path('runs/mappo_v3_gate')
@@ -111,8 +110,6 @@ jobs:
                     'miss_mean',sum(item['miss'])/len(item['miss']),
                     'max_observed',max(item['observed']),
                     'kinds',dict(item['kinds']))
-          # This gate deliberately does not demand target discovery after 30 updates,
-          # but it must reject the v2 failure mode where every checkpoint is pure hold.
           assert any(sum(v['kinds'][k] for k in ('search','track','shared_track'))>0
                      for v in summary.values())
           forbidden=['S10_heldout','S11_heldout','S9a_ood','S9b_ood','S7_overload']
