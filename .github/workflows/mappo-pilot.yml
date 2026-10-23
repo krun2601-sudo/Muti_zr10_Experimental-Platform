@@ -23,17 +23,17 @@ jobs:
       - name: Install research and CPU PyTorch dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install numpy scipy PyYAML opencv-python-headless matplotlib gymnasium pytest
+          python -m pip install numpy scipy pandas PyYAML opencv-python-headless matplotlib gymnasium pytest
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
           python -m pip install -e ./zr10_cooperative_lab --no-deps
-      - name: Run frozen MAPPO protocol regression tests
+      - name: Run candidate MAPPO protocol regression tests
         working-directory: zr10_cooperative_lab
         run: |
           pytest -q tests/test_mappo_frozen_protocol.py tests/test_research_protocol.py
-      - name: Train short MAPPO pipeline pilot on training-only scenarios
+      - name: Train short candidate MAPPO pilot on training-only scenarios
         working-directory: zr10_cooperative_lab
         run: |
-          python -m zr10lab.research.mappo_protocol train \
+          python -m zr10lab.research.candidate_mappo train \
             configs/research/scenarios/S1_single.yaml \
             configs/research/scenarios/S2_staggered.yaml \
             configs/research/scenarios/S3_crossing.yaml \
@@ -47,29 +47,32 @@ jobs:
             --checkpoint-every 5 \
             --device cpu
           ls -lh runs/mappo_pilot/train
-      - name: Verify training metadata uses full-grid observation and frozen train seeds
+      - name: Verify candidate training metadata and frozen train seeds
         working-directory: zr10_cooperative_lab
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
-          index = json.loads(Path('runs/mappo_pilot/train/mappo_seed5101_training_index.json').read_text())
+          index = json.loads(Path('runs/mappo_pilot/train/candidate_mappo_seed5101_training_index.json').read_text())
+          assert index['implementation'] == 'candidate_categorical_v1'
           assert index['training_env_seeds'] == [1001, 1002]
           assert index['max_targets'] == 8
           assert index['top_search_cells'] == 65
+          assert index['max_candidates'] == 512
+          assert index['episodes_started'] >= 1
           for checkpoint in index['checkpoints']:
               meta = json.loads(Path(checkpoint + '.json').read_text())
+              assert meta['implementation'] == 'candidate_categorical_v1'
               assert meta['training_env_seeds'] == [1001, 1002]
-              assert meta['max_targets'] == 8
-              assert meta['top_search_cells'] == 65
               assert meta['obs_dim'] == 285
-          print('MAPPO training metadata OK')
+              assert meta['max_candidates'] == 512
+          print('candidate MAPPO training metadata OK')
           PY
       - name: Select pilot checkpoint on validation-only S4/S8
         working-directory: zr10_cooperative_lab
         run: |
-          CHECKPOINTS=(runs/mappo_pilot/train/mappo_seed5101_u*.pt)
-          python -m zr10lab.research.mappo_protocol select \
+          CHECKPOINTS=(runs/mappo_pilot/train/candidate_mappo_seed5101_u*.pt)
+          python -m zr10lab.research.candidate_mappo select \
             "${CHECKPOINTS[@]}" \
             --configs \
               configs/research/scenarios/S4_boundary_handoff.yaml \
@@ -77,14 +80,15 @@ jobs:
             --seeds 2001 \
             --output runs/mappo_pilot/select \
             --device cpu
+          cat runs/mappo_pilot/select/validation_checkpoint_summary.csv
           cat runs/mappo_pilot/select/selected_checkpoint.json
-      - name: Verify pilot provenance contains no held-out scenario
+      - name: Verify smoke behavior and split provenance
         working-directory: zr10_cooperative_lab
         run: |
           python - <<'PY'
-          import json
+          import csv, json, math
           from pathlib import Path
-          train = json.loads(Path('runs/mappo_pilot/train/mappo_seed5101_training_index.json').read_text())
+          train = json.loads(Path('runs/mappo_pilot/train/candidate_mappo_seed5101_training_index.json').read_text())
           selected = json.loads(Path('runs/mappo_pilot/select/selected_checkpoint.json').read_text())
           text = json.dumps({'train': train, 'selected': selected})
           forbidden = ['S10_heldout', 'S11_heldout', 'S9a_ood', 'S9b_ood', 'S7_overload']
@@ -92,11 +96,24 @@ jobs:
           assert all(token in text for token in ['S1_single', 'S2_staggered', 'S3_crossing', 'S5_cluster_split', 'S6_contention'])
           assert 'S4_boundary_handoff' in text and 'S8_maneuver' in text
           assert train['training_env_seeds'] == [1001, 1002]
-          print('MAPPO pilot split provenance OK')
+
+          # Engineering smoke gate only: the executable candidate interface should
+          # actually observe at least one search cell during validation. This does
+          # not require good target discovery after only ten updates.
+          observed = 0.0
+          for metrics in Path('runs/mappo_pilot/select/validation_runs').rglob('metrics.csv'):
+              with metrics.open(encoding='utf-8-sig', newline='') as handle:
+                  rows = list(csv.DictReader(handle))
+              if rows and 'research_search_observed_cells' in rows[-1]:
+                  value = float(rows[-1]['research_search_observed_cells'])
+                  if math.isfinite(value):
+                      observed = max(observed, value)
+          assert observed > 0.0, 'candidate MAPPO smoke validation never observed a search cell'
+          print(f'candidate MAPPO split provenance OK; max observed search cells={observed:g}')
           PY
-      - name: Upload MAPPO pilot outputs
+      - name: Upload candidate MAPPO pilot outputs
         uses: actions/upload-artifact@v4
         with:
-          name: mappo-pilot-${{ github.sha }}
+          name: candidate-mappo-pilot-${{ github.sha }}
           path: zr10_cooperative_lab/runs/mappo_pilot
           retention-days: 30
