@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   research-tests:
+    if: ${{ !contains(github.event.head_commit.message, '[quick-only]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -38,6 +39,7 @@ jobs:
         run: pytest -q tests/test_geometry.py tests/test_learning.py tests/test_control_modes.py
 
   pilot-experiments:
+    if: ${{ !contains(github.event.head_commit.message, '[quick-only]') }}
     needs: research-tests
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -88,4 +90,67 @@ jobs:
         with:
           name: ecp-rh-pilot-raw-${{ github.sha }}
           path: zr10_cooperative_lab/runs/ci_pilot
+          retention-days: 30
+
+  quick-s4-diagnostic:
+    if: ${{ contains(github.event.head_commit.message, '[quick-only]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: zr10_cooperative_lab/pyproject.toml
+      - name: Install simulation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy scipy PyYAML opencv-python-headless matplotlib gymnasium
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - name: Create non-held-out shortened S4 diagnostic config
+        working-directory: zr10_cooperative_lab
+        run: |
+          cat > configs/research/scenarios/S4_quick_ci.yaml <<'EOF'
+          extends: S4_boundary_handoff.yaml
+          system: {duration_s: 45}
+          policy:
+            research:
+              scenario:
+                id: S4-quick-ci
+          EOF
+      - name: Run critical-method S4 diagnostic
+        working-directory: zr10_cooperative_lab
+        run: |
+          python -m zr10lab.research.batch \
+            configs/research/scenarios/S4_quick_ci.yaml \
+            --methods greedy weighted_rh ssm_belief ecprh \
+            --seeds 7102 \
+            --output runs/ci_quick_s4 \
+            --fail-fast
+      - name: Preserve compact quick results in branch
+        run: |
+          rm -rf zr10_cooperative_lab/ci_results/quick_s4_latest
+          mkdir -p zr10_cooperative_lab/ci_results/quick_s4_latest
+          cp zr10_cooperative_lab/runs/ci_quick_s4/index.csv zr10_cooperative_lab/ci_results/quick_s4_latest/
+          cp zr10_cooperative_lab/runs/ci_quick_s4/batch_status.json zr10_cooperative_lab/ci_results/quick_s4_latest/
+          cp zr10_cooperative_lab/runs/ci_quick_s4/run_metrics.csv zr10_cooperative_lab/ci_results/quick_s4_latest/
+          cp zr10_cooperative_lab/runs/ci_quick_s4/summary_long.csv zr10_cooperative_lab/ci_results/quick_s4_latest/
+          cat > zr10_cooperative_lab/ci_results/quick_s4_latest/provenance.txt <<EOF
+          source_sha=${GITHUB_SHA}
+          pilot_seed=7102
+          scenario=S4_boundary_handoff_shortened_to_45s
+          purpose=mechanism_diagnostic_only
+          held_out_test_used=false
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add zr10_cooperative_lab/ci_results/quick_s4_latest
+          git commit -m "Store quick S4 diagnostic summary [skip ci]" || true
+          git push
+      - name: Upload full quick diagnostic runs
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecp-rh-quick-s4-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/ci_quick_s4
           retention-days: 30
