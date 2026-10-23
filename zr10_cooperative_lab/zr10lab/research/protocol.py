@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 from pathlib import Path
 
@@ -84,8 +85,18 @@ def _mentions_heldout(values) -> bool:
     return any(token in text for token in _TEST_TOKENS)
 
 
-def _read_baseline_selections(directory: str | Path, required_methods) -> dict[str, dict]:
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _read_baseline_selections(directory: str | Path, required_methods,
+                              expected_sha256: dict[str, str] | None = None) -> dict[str, dict]:
     directory = Path(directory).resolve()
+    expected_sha256 = dict(expected_sha256 or {})
     selections = {}
     for method in required_methods:
         path = directory / method / f"selected_{method}.json"
@@ -93,12 +104,24 @@ def _read_baseline_selections(directory: str | Path, required_methods) -> dict[s
             path = directory / f"selected_{method}.json"
         if not path.is_file():
             raise ValueError(f"missing validation-selected parameters for {method}: expected selected_{method}.json under {directory}")
+        expected_hash = str(expected_sha256.get(method, "")).lower()
+        if not expected_hash:
+            raise ValueError(f"manifest contains no frozen SHA-256 identity for baseline {method}")
+        actual_hash = _sha256_file(path)
+        if actual_hash != expected_hash:
+            raise ValueError(
+                f"frozen baseline selection hash mismatch for {method}: "
+                f"expected={expected_hash}, actual={actual_hash}, path={path}"
+            )
         data = json.loads(path.read_text(encoding="utf-8"))
         if data.get("method") != method or not isinstance(data.get("selected_params"), dict):
             raise ValueError(f"invalid baseline selection file: {path}")
         if _mentions_heldout(data.get("validation_configs", [])):
             raise ValueError(f"baseline selection for {method} appears to use held-out test scenarios")
-        selections[method] = {"path": str(path), "params": copy.deepcopy(data["selected_params"])}
+        selections[method] = {
+            "path": str(path), "sha256": actual_hash,
+            "params": copy.deepcopy(data["selected_params"]),
+        }
     return selections
 
 
@@ -194,7 +217,9 @@ def run_split(manifest_path: str | Path, split: str, output: str | Path,
             path, manifest, "baseline_selection_dir", baseline_selection_dir,
             label="frozen validation selections",
         )
-        baseline_selections = _read_baseline_selections(frozen_baseline_dir, required_baselines)
+        baseline_hashes = manifest.get("frozen_inputs", {}).get("baseline_selection_sha256", {})
+        baseline_selections = _read_baseline_selections(
+            frozen_baseline_dir, required_baselines, expected_sha256=baseline_hashes)
     if split in ("test_main", "test_ood") and required_learning:
         frozen_learning_dir = _require_frozen_input_dir(
             path, manifest, "learning_selection_dir", learning_selection_dir,
