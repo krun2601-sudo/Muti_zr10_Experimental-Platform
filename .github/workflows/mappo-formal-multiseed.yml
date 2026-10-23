@@ -162,18 +162,86 @@ jobs:
             --minimum-uses-per-training-pair 1
           cat runs/formal_learning_selection/common_update_validation_summary.csv
           cat runs/formal_learning_selection/formal_learning_selection.json
+      - name: Package portable selected-model bundle
+        working-directory: zr10_cooperative_lab
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, shutil
+          from pathlib import Path
+
+          selection_path = Path('runs/formal_learning_selection/formal_learning_selection.json')
+          selection = json.loads(selection_path.read_text())
+          bundle = Path('runs/formal_learning_bundle')
+          models = bundle / 'models'
+          models.mkdir(parents=True, exist_ok=True)
+          portable = {
+              'schema_version': 1,
+              'implementation': selection['implementation'],
+              'selected_update': selection['selected_update'],
+              'network_seeds': selection['network_seeds'],
+              'validation_cases': selection['validation_cases'],
+              'selection_metrics': selection['selection_metrics'],
+              'selected_validation_summary': selection['selected_validation_summary'],
+              'training_coverage_requirements': selection['training_coverage_requirements'],
+              'source_run_id': os.environ.get('GITHUB_RUN_ID'),
+              'source_commit_sha': os.environ.get('GITHUB_SHA'),
+              'replicas': [],
+          }
+          for row in selection['replicas']:
+              seed = int(row['network_seed'])
+              src_model = Path(row['checkpoint'])
+              src_meta = Path(row['metadata'])
+              dst_model = models / f'mappo_seed{seed}_u{selection["selected_update"]:04d}.pt'
+              dst_meta = Path(str(dst_model) + '.json')
+              shutil.copy2(src_model, dst_model)
+              shutil.copy2(src_meta, dst_meta)
+              model_hash = hashlib.sha256(dst_model.read_bytes()).hexdigest()
+              meta_hash = hashlib.sha256(dst_meta.read_bytes()).hexdigest()
+              assert model_hash == row['checkpoint_sha256']
+              assert meta_hash == row['metadata_sha256']
+              portable['replicas'].append({
+                  'network_seed': seed,
+                  'model_path': str(Path('models') / dst_model.name),
+                  'model_sha256': model_hash,
+                  'metadata_path': str(Path('models') / dst_meta.name),
+                  'metadata_sha256': meta_hash,
+                  'episodes_started': row['episodes_started'],
+                  'training_pair_count': row['episode_usage_count'],
+                  'minimum_uses_per_training_pair': row['minimum_uses_per_training_pair'],
+              })
+          (bundle / 'frozen_learning_selection.json').write_text(
+              json.dumps(portable, ensure_ascii=False, indent=2))
+          shutil.copy2('runs/formal_learning_selection/common_update_validation_summary.csv',
+                       bundle / 'common_update_validation_summary.csv')
+          bundle_hashes = {
+              p.relative_to(bundle).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+              for p in sorted(bundle.rglob('*')) if p.is_file()
+          }
+          (bundle / 'bundle_sha256.json').write_text(json.dumps(bundle_hashes, indent=2))
+          print(json.dumps(portable, ensure_ascii=False, indent=2))
+          PY
       - name: Verify no held-out tokens entered learning artifacts
         working-directory: zr10_cooperative_lab
         run: |
           python - <<'PY'
           from pathlib import Path
-          text = '\n'.join(p.read_text(errors='ignore') for p in Path('runs/formal_learning_selection').rglob('*') if p.is_file())
+          roots = [Path('runs/formal_learning_selection'), Path('runs/formal_learning_bundle')]
+          text = '\n'.join(
+              p.read_text(errors='ignore') for root in roots for p in root.rglob('*')
+              if p.is_file() and p.suffix != '.pt')
           forbidden = ['S10_heldout', 'S11_heldout', 'S9a_ood', 'S9b_ood', 'S7_overload', '3001', '4001']
-          assert not any(token in text for token in forbidden), 'held-out token found in formal learning selection'
+          assert not any(token in text for token in forbidden), 'held-out token found in formal learning artifact'
           PY
-      - name: Upload common-update freeze manifest
+      - name: Upload common-update selection manifest
         uses: actions/upload-artifact@v4
         with:
           name: mappo-formal-learning-selection-${{ github.sha }}
           path: zr10_cooperative_lab/runs/formal_learning_selection
           retention-days: 90
+      - name: Upload portable frozen model bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: mappo-formal-frozen-bundle-${{ github.run_id }}
+          path: zr10_cooperative_lab/runs/formal_learning_bundle
+          retention-days: 90
+          compression-level: 0
