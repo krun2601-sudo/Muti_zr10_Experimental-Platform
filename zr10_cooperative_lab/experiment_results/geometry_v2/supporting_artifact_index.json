@@ -1,0 +1,220 @@
+{
+  "schema_version": 1,
+  "experiment_revision": "geometry-v2-central-roi-20261024",
+  "workflow_run_id": 40109750526,
+  "data_commit_sha": "d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+  "expected": {
+    "ood_runs": 280,
+    "ablation_runs": 415,
+    "sensitivity_runs": 250,
+    "scalability_points": 24,
+    "scalability_repetitions_per_point": 10
+  },
+  "combined_artifacts": [
+    {
+      "artifact_id": 12572396586,
+      "name": "paper-cvfix-ablations-combined-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "08ecd31794d4b09cbc573cc217dcb389eb294f46e21750f26c1f8f932cac7d93",
+      "size_in_bytes": 143994,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12567732029,
+      "name": "paper-cvfix-ood-combined-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "be044e3031ee0b017d0cbf0d37e26dfe538abcfc20c7783e729acf1a124feab8",
+      "size_in_bytes": 742638,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12566076784,
+      "name": "paper-cvfix-scalability-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "c6d47f871317b451c876fe6f3c6cc67bdc1c88f4ba9baa31f2a3b6e96690d782",
+      "size_in_bytes": 1437,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12567382927,
+      "name": "paper-cvfix-sensitivity-combined-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "e93911f8b79eb6e56f0274bc487c8df12dc9638eae0e4fc6582f68749bde745a",
+      "size_in_bytes": 147479,
+      "expires_at": "2027-01-22T16:03:00Z"
+    }
+  ],
+  "all_source_artifacts": [
+    {
+      "artifact_id": 12571528530,
+      "name": "paper-cvfix-ablation-S11-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "a017333d2e1ddfc73458366895e0c5d2e41c1234819987755cda03f8dad15bfb",
+      "size_in_bytes": 41578153,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12567901858,
+      "name": "paper-cvfix-ablation-S2-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "2093a8d4bffee7edbceb8fa262e48730cc6e1e6b559cb7eb7acd7964e1482304",
+      "size_in_bytes": 31429631,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12567396335,
+      "name": "paper-cvfix-ablation-S4-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "e6b67a73d09907912c98b9daee978e707fc5c70c3cec8612b45f2c93eeb873f1",
+      "size_in_bytes": 9228619,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12570026099,
+      "name": "paper-cvfix-ablation-S5-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "c4e12b68a09a4c7a08b85370ddc4630c0e6df2fc0e690dcd12d34472154fd42f",
+      "size_in_bytes": 40161929,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12570811978,
+      "name": "paper-cvfix-ablation-S6-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "26d43734efd8544a7c601ee00786dacc1d477568b7b830a734a146173c906fed",
+      "size_in_bytes": 48654164,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12566546507,
+      "name": "paper-cvfix-ablation-S8-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "ea538fb2f66b8511de847dca7d233339e11c4f30e7b6170c81f744b7c68277c6",
+      "size_in_bytes": 5031608,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12567401707,
+      "name": "paper-cvfix-ablation-S9a-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "e2b2249604ed781162c085a6638282205c2a65ab1d2d5e0ad52afe1ce1e720ad",
+      "size_in_bytes": 22702596,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12567537910,
+      "name": "paper-cvfix-ablation-S9b-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "d3abde475759e9d9d610c8cbb5f5fa4586ac4b2ac860647fe5c15bd4817cc954",
+      "size_in_bytes": 27117177,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12572396586,
+      "name": "paper-cvfix-ablations-combined-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "08ecd31794d4b09cbc573cc217dcb389eb294f46e21750f26c1f8f932cac7d93",
+      "size_in_bytes": 143994,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12566279848,
+      "name": "paper-cvfix-ood-classical_ptz-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "e469eecdf243e43ffb1a290833a172809e3927c2c7987ca1ca72e879a19f3ddf",
+      "size_in_bytes": 18389858,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12567732029,
+      "name": "paper-cvfix-ood-combined-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "be044e3031ee0b017d0cbf0d37e26dfe538abcfc20c7783e729acf1a124feab8",
+      "size_in_bytes": 742638,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12567252428,
+      "name": "paper-cvfix-ood-ecprh-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "3cee20114aa97a0ea51877daa9a71d9a8db80809126d05bdec85f30a995bbd7e",
+      "size_in_bytes": 18979831,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12566101388,
+      "name": "paper-cvfix-ood-fixed_scan-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "75e38d6c73f539b699b00f300f47838aa71edaca72e2e0fdf0b59a5741e01947",
+      "size_in_bytes": 16171776,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12566517111,
+      "name": "paper-cvfix-ood-greedy-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "94d3c7bb681ba66d5b91b2b4c7ca4971278919654cf48032ab94c8c60b7f9b56",
+      "size_in_bytes": 15847955,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12566873807,
+      "name": "paper-cvfix-ood-info_planner-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "24e27250d4014722374186821e24589f6653ea8591a6fa1b972c52620fbb243f",
+      "size_in_bytes": 15770528,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12567263066,
+      "name": "paper-cvfix-ood-ssm_belief-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "abc35a1b671d4660d59fadd7866fdfe423beb09be39cfe9c378d7148f90343db",
+      "size_in_bytes": 17191564,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12566174555,
+      "name": "paper-cvfix-ood-weighted_rh-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "8f3d37c4dd90f1aba4774ee36a7b697f22cae1865af28bdc0650db77103d8c85",
+      "size_in_bytes": 17937316,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12566076784,
+      "name": "paper-cvfix-scalability-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "c6d47f871317b451c876fe6f3c6cc67bdc1c88f4ba9baa31f2a3b6e96690d782",
+      "size_in_bytes": 1437,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12567382927,
+      "name": "paper-cvfix-sensitivity-combined-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "e93911f8b79eb6e56f0274bc487c8df12dc9638eae0e4fc6582f68749bde745a",
+      "size_in_bytes": 147479,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12567397846,
+      "name": "paper-cvfix-sensitivity-detection_probability-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "8ebe2f40f982efab92b1aae09b0dbb29512220f1b77f7fcdc3b71cdd169a7934",
+      "size_in_bytes": 18781033,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12567292654,
+      "name": "paper-cvfix-sensitivity-horizon_s-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "745385abae8e89f54750a0e9e15aeccf729e8b564917214652b355eddd144aa7",
+      "size_in_bytes": 22003989,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12566254467,
+      "name": "paper-cvfix-sensitivity-position_noise_std_m-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "dd0b7e6f9b8cdecaac907643fbfa38ee82cb73fcadea66741c65834f7e4aba68",
+      "size_in_bytes": 23472743,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12566083980,
+      "name": "paper-cvfix-sensitivity-replan_period_s-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "95b05230b311b586a123352ccdc6f2a0b61970517915a2d692c1db0c2432532f",
+      "size_in_bytes": 14105506,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12566579945,
+      "name": "paper-cvfix-sensitivity-settle_s-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "219bfe74b69f23cfae51b7cce7bff4f8a2e11b62171cc17d9729e4f7de43e41f",
+      "size_in_bytes": 14193787,
+      "expires_at": "2027-01-22T16:03:00Z"
+    },
+    {
+      "artifact_id": 12566347759,
+      "name": "paper-cvfix-sensitivity-visibility_risk-d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "sha256": "e7246e15901d7e42fc9d96b51f63db722a0068c512d72d88c39e9db95b1384fe",
+      "size_in_bytes": 23462166,
+      "expires_at": "2027-01-22T16:03:00Z"
+    }
+  ]
+}

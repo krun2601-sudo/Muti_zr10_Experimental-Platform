@@ -1,0 +1,15 @@
+﻿ci95_high,ci95_low,mean,method,metric,n,scenario
+0.0,0.0,0.0,classical_ptz,research_missed_target_rate,20,S9a-ood-fast-targets
+0.0,0.0,0.0,classical_ptz,research_missed_target_rate,20,S9b-ood-delay-noise
+0.0,0.0,0.0,ecprh,research_missed_target_rate,20,S9a-ood-fast-targets
+0.0,0.0,0.0,ecprh,research_missed_target_rate,20,S9b-ood-delay-noise
+0.0,0.0,0.0,fixed_scan,research_missed_target_rate,20,S9a-ood-fast-targets
+0.0,0.0,0.0,fixed_scan,research_missed_target_rate,20,S9b-ood-delay-noise
+0.16370018227838481,0.0029664843882818426,0.08333333333333333,greedy,research_missed_target_rate,20,S9a-ood-fast-targets
+0.0,0.0,0.0,greedy,research_missed_target_rate,20,S9b-ood-delay-noise
+0.0,0.0,0.0,info_planner,research_missed_target_rate,20,S9a-ood-fast-targets
+0.0,0.0,0.0,info_planner,research_missed_target_rate,20,S9b-ood-delay-noise
+0.0,0.0,0.0,ssm_belief,research_missed_target_rate,20,S9a-ood-fast-targets
+0.0,0.0,0.0,ssm_belief,research_missed_target_rate,20,S9b-ood-delay-noise
+0.049333333333333326,-0.015999999999999997,0.016666666666666666,weighted_rh,research_missed_target_rate,20,S9a-ood-fast-targets
+0.0,0.0,0.0,weighted_rh,research_missed_target_rate,20,S9b-ood-delay-noise

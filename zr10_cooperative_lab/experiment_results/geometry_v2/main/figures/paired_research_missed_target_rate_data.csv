@@ -1,0 +1,7 @@
+﻿advantage,ci95_high,ci95_low,competitor,holm_adjusted_p,metric,n_pairs,reference
+0.00625,0.014583333333333332,0.0,classical_ptz,0.49958709998130246,research_missed_target_rate,80,ecprh
+0.0041666666666666675,0.0125,-0.004166666666666667,fixed_scan,1.0,research_missed_target_rate,80,ecprh
+0.0020833333333333333,0.00625,0.0,greedy,1.0,research_missed_target_rate,80,ecprh
+-0.0020833333333333333,0.0,-0.00625,info_planner,1.0,research_missed_target_rate,80,ecprh
+-0.0020833333333333333,0.0,-0.00625,ssm_belief,1.0,research_missed_target_rate,80,ecprh
+0.0020833333333333333,0.010416666666666666,-0.004166666666666667,weighted_rh,1.0,research_missed_target_rate,80,ecprh

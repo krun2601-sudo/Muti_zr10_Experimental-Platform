@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "experiment_revision": "geometry-v2-central-roi-20261024",
+  "workflow_run_id": 40108890844,
+  "data_commit_sha": "7cb5a65bba83ad419b6b2ffb51fc5335c68ef967",
+  "combined_artifact": {
+    "artifact_id": 12575896483,
+    "name": "paper-test-main-combined-7cb5a65bba83ad419b6b2ffb51fc5335c68ef967",
+    "sha256": "659d8e18f637e401b805e6406c688df2a9f33fce303cfcff6d5c8747319fb1f2",
+    "size_in_bytes": 901484,
+    "expires_at": "2027-01-22T15:51:40Z"
+  },
+  "source_artifacts": [
+    {
+      "artifact_id": 12564924662,
+      "method": "fixed_scan",
+      "sha256": "aef566d4e7f5ab7218fd37df3037bf16dcd027d9d77518488c9bbbce9915c05f",
+      "size_in_bytes": 38557205
+    },
+    {
+      "artifact_id": 12569283490,
+      "method": "greedy",
+      "sha256": "80818efd784af6ee8f99978fd9cfc5ba69d68acb28ad250ce01919a10fd781f2",
+      "size_in_bytes": 40197691
+    },
+    {
+      "artifact_id": 12570410204,
+      "method": "weighted_rh",
+      "sha256": "8990fb7d3ccbff65d23ef83d5afdad6454e32cf786c3c3f3b0d8208699236775",
+      "size_in_bytes": 46985361
+    },
+    {
+      "artifact_id": 12571292315,
+      "method": "classical_ptz",
+      "sha256": "b51c594738df1ab1cd0a1a174d16ca18d4c651b776fa1c781c718ba11d46a1fe",
+      "size_in_bytes": 45818859
+    },
+    {
+      "artifact_id": 12568177586,
+      "method": "info_planner",
+      "sha256": "559b431bc124c4d0d0c09b41183dca5dd4c1058a52fa982958f30b8153d5f0cb",
+      "size_in_bytes": 38378524
+    },
+    {
+      "artifact_id": 12576076170,
+      "method": "ssm_belief",
+      "sha256": "21d2acfd11669f4936c07a008883beb8eed8a84c7dbec1af1b13adcbeb8115c7",
+      "size_in_bytes": 45922834
+    },
+    {
+      "artifact_id": 12570819232,
+      "method": "ecprh",
+      "sha256": "72e9f1aa2cb07411d54fc3df4d745ea26ccc6dbe50f9081f4c7e1c680ef4c7aa",
+      "size_in_bytes": 48400621
+    }
+  ]
+}

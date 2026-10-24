@@ -1,0 +1,15 @@
+﻿ci95_high,ci95_low,mean,method,metric,n,scenario
+13.077803099527854,11.51219690047075,12.294999999999302,classical_ptz,research_revisit_age_p95_s,20,S9a-ood-fast-targets
+9.011788830018485,7.883211169980552,8.447499999999518,classical_ptz,research_revisit_age_p95_s,20,S9b-ood-delay-noise
+10.221495498230153,8.859504501768763,9.540499999999458,ecprh,research_revisit_age_p95_s,20,S9a-ood-fast-targets
+9.619595368790053,8.310404631208923,8.964999999999488,ecprh,research_revisit_age_p95_s,20,S9b-ood-delay-noise
+23.365841854577884,21.679158145420498,22.52249999999919,fixed_scan,research_revisit_age_p95_s,20,S9a-ood-fast-targets
+30.27021266403395,17.924787335964062,24.097499999999005,fixed_scan,research_revisit_age_p95_s,20,S9b-ood-delay-noise
+28.231429225794642,20.46757077420382,24.34949999999923,greedy,research_revisit_age_p95_s,20,S9a-ood-fast-targets
+31.199040333328114,20.78795966666992,25.993499999999017,greedy,research_revisit_age_p95_s,20,S9b-ood-delay-noise
+8.47443458139509,6.404565418604066,7.439499999999578,info_planner,research_revisit_age_p95_s,20,S9a-ood-fast-targets
+8.899672140785341,7.570327859213722,8.234999999999532,info_planner,research_revisit_age_p95_s,20,S9b-ood-delay-noise
+11.102021474202974,9.719978525795842,10.410999999999408,ssm_belief,research_revisit_age_p95_s,20,S9a-ood-fast-targets
+9.678602891454233,8.05639710854475,8.867499999999492,ssm_belief,research_revisit_age_p95_s,20,S9b-ood-delay-noise
+27.38547853417585,18.61952146582261,23.00249999999923,weighted_rh,research_revisit_age_p95_s,20,S9a-ood-fast-targets
+47.08096419706975,36.4780358029285,41.779499999999125,weighted_rh,research_revisit_age_p95_s,20,S9b-ood-delay-noise

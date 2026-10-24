@@ -1,0 +1,102 @@
+{
+  "expected_total_runs": 560,
+  "actual_total_runs": 560,
+  "methods": [
+    "fixed_scan",
+    "greedy",
+    "weighted_rh",
+    "classical_ptz",
+    "info_planner",
+    "ssm_belief",
+    "ecprh"
+  ],
+  "scenarios": [
+    "S0-no-target",
+    "S10-heldout-mixed",
+    "S11-heldout-handoff-contention",
+    "S7-overload"
+  ],
+  "seeds_per_scenario": 20,
+  "runs_per_method": {
+    "fixed_scan": 80,
+    "greedy": 80,
+    "weighted_rh": 80,
+    "classical_ptz": 80,
+    "info_planner": 80,
+    "ssm_belief": 80,
+    "ecprh": 80
+  },
+  "reference_method": "ecprh",
+  "primary_metrics": [
+    "research_missed_target_rate",
+    "research_detection_delay_censored_p95_s",
+    "research_total_loss_s",
+    "research_max_loss_gap_s",
+    "research_revisit_age_p95_s"
+  ],
+  "primary_comparison_rows": 150,
+  "comparison_rows": 540,
+  "conditional_secondary_n_pairs": {
+    "research_assignment_switch_count": {
+      "min": 20,
+      "max": 80
+    },
+    "research_detection_delay_censored_mean_s": {
+      "min": 20,
+      "max": 80
+    },
+    "research_detection_delay_mean_s": {
+      "min": 20,
+      "max": 60
+    },
+    "research_detection_delay_p95_s": {
+      "min": 20,
+      "max": 60
+    },
+    "research_discovery_rate": {
+      "min": 20,
+      "max": 80
+    },
+    "research_empirical_risk_violation_rate": {
+      "min": 20,
+      "max": 60
+    },
+    "research_handover_success_rate": {
+      "min": 11,
+      "max": 60
+    },
+    "research_monitor_visible_ratio": {
+      "min": 20,
+      "max": 60
+    },
+    "research_search_age_integral": {
+      "min": 20,
+      "max": 80
+    },
+    "research_sensing_duty_cycle": {
+      "min": 20,
+      "max": 80
+    },
+    "research_total_pitch_motion_deg": {
+      "min": 20,
+      "max": 80
+    },
+    "research_total_yaw_motion_deg": {
+      "min": 20,
+      "max": 80
+    },
+    "research_total_zoom_change": {
+      "min": 20,
+      "max": 80
+    },
+    "solve_ms_p95": {
+      "min": 20,
+      "max": 80
+    },
+    "solver_timeout_rate": {
+      "min": 20,
+      "max": 80
+    }
+  },
+  "status": "ok"
+}

@@ -1,0 +1,15 @@
+﻿ci95_high,ci95_low,mean,method,metric,n,scenario
+6.85981535712557,4.9601846428744265,5.909999999999998,classical_ptz,research_total_loss_s,20,S9a-ood-fast-targets
+35.08522840208725,25.78477159791273,30.43499999999999,classical_ptz,research_total_loss_s,20,S9b-ood-delay-noise
+3.6414967062868873,2.428503293713114,3.0350000000000006,ecprh,research_total_loss_s,20,S9a-ood-fast-targets
+26.521200452188157,17.89879954781183,22.209999999999994,ecprh,research_total_loss_s,20,S9b-ood-delay-noise
+37.7079826479371,34.70201735206291,36.205000000000005,fixed_scan,research_total_loss_s,20,S9a-ood-fast-targets
+93.61943348851884,91.98056651148221,92.80000000000052,fixed_scan,research_total_loss_s,20,S9b-ood-delay-noise
+43.43562688941121,35.164373110588784,39.3,greedy,research_total_loss_s,20,S9a-ood-fast-targets
+94.5284845800418,83.63151541995913,89.08000000000047,greedy,research_total_loss_s,20,S9b-ood-delay-noise
+50.637238522218155,47.95276147778189,49.29500000000002,info_planner,research_total_loss_s,20,S9a-ood-fast-targets
+91.0892875762653,83.96071242373556,87.52500000000043,info_planner,research_total_loss_s,20,S9b-ood-delay-noise
+14.655925118204157,12.58407488179583,13.619999999999994,ssm_belief,research_total_loss_s,20,S9a-ood-fast-targets
+41.883935200827395,33.62606479917257,37.75499999999998,ssm_belief,research_total_loss_s,20,S9b-ood-delay-noise
+6.839220183402169,4.290779816597823,5.564999999999996,weighted_rh,research_total_loss_s,20,S9a-ood-fast-targets
+21.086099123083482,13.473900876916506,17.279999999999994,weighted_rh,research_total_loss_s,20,S9b-ood-delay-noise

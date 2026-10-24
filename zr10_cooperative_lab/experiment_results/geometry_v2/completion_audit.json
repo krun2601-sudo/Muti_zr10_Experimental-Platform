@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "experiment_revision": "geometry-v2-central-roi-20261024",
+  "branch": "research/ecp-rh-experiments",
+  "configuration_commit": "2fdde56dfa2c0348310dd80b2444391c588be49c",
+  "formal_workflows": {
+    "validation": {
+      "run_ids": [40097586890, 40106592387],
+      "status": "completed",
+      "frozen_selection_methods": 4
+    },
+    "main": {
+      "run_id": 40108890844,
+      "data_commit": "7cb5a65bba83ad419b6b2ffb51fc5335c68ef967",
+      "status": "completed",
+      "aggregate_conclusion": "success"
+    },
+    "supporting": {
+      "run_id": 40109750526,
+      "data_commit": "d05956a6c050d8c1c2c47ef2f9ccf03c18dae41d",
+      "status": "completed"
+    }
+  },
+  "formal_result_counts": {
+    "main": {
+      "expected_rows": 560,
+      "actual_rows": 560,
+      "completed_rows": 560,
+      "duplicate_scenario_seed_method_rows": 0
+    },
+    "ood": {
+      "expected_rows": 280,
+      "actual_rows": 280,
+      "completed_rows": 280,
+      "duplicate_scenario_seed_method_rows": 0
+    },
+    "ablations": {
+      "expected_rows": 415,
+      "actual_rows": 415,
+      "completed_rows": 415,
+      "duplicate_scenario_seed_variant_rows": 0
+    },
+    "sensitivity": {
+      "expected_rows": 250,
+      "actual_rows": 250,
+      "completed_rows": 250,
+      "duplicate_scenario_seed_variant_rows": 0
+    },
+    "scalability": {
+      "expected_points": 24,
+      "actual_points": 24,
+      "repetitions_per_point": 10,
+      "duplicate_parameter_points": 0
+    }
+  },
+  "main_integrity_audit": {
+    "status": "ok",
+    "methods": 7,
+    "scenarios": 4,
+    "seeds_per_scenario": 20,
+    "primary_paired_comparison_rows": 150,
+    "all_paired_comparison_rows": 540
+  },
+  "source_file_sha256": {
+    "main/run_metrics.csv": "08802e0cd5608b51f6e04b558fbcd9234dc39e05408ce8a79bb8f273cc413530",
+    "main/summary_long.csv": "bf63a59a480e7b92e393f9ab92839185b2959ea4bd1de52e3ddf93e554c26c1b",
+    "main/paired_comparisons.csv": "a4562294ba95cd39103866946f516f02ac9d59eb1913af46efd84d37d276609c",
+    "main/integrity_audit.json": "1f54e4a03c04bc1e8dd7f5df6125dcaf561997129d82a94a14a10e903ca6addf",
+    "ood/run_metrics.csv": "8540d32ba223c24de2d415f0e0f433a4c777d4bb1ecedf8ec8176aadd88117bd",
+    "ood/summary_long.csv": "9071cde7f70fa2341dd1ef88016471d09ef61fa07f38498f40da17a6e353dfda",
+    "ood/paired_comparisons.csv": "581627448e4e7cb5c5537ffe749f6eab7d50014221f5649c6494b9adb49fc28e",
+    "ablations/run_metrics.csv": "e5b10730cdc18f5dd7ad44863c8db50bf578f565a13378589bb95aee5936b37a",
+    "ablations/summary_long.csv": "10f80202e100fb8d69ce03d1ca3d7675dd58a5f7822d160d77c389b098a4f9e2",
+    "ablations/paired_comparisons.csv": "eac751e179cbc5afa3e212209a90a69498cb7b625b5800a008e62dd5e79f396c",
+    "sensitivity/run_metrics.csv": "cc22e177c82e3ccca186c1fc0754d572415d7ac7eb42d15713793d2595e870d6",
+    "sensitivity/summary_long.csv": "605f501aabb7fd599a7b5b2fc57119420cbb2b21f54ff506e346e1f6d7840436",
+    "scalability/scalability.csv": "2491c4498ee018dadc52d24aadc2bc1b7a09a860052c36acfb151d29b2b5fce8"
+  },
+  "verification": {
+    "local_pytest_passed": 222,
+    "local_pytest_skipped": 2,
+    "main_result_audit_reexecuted_locally": true,
+    "yaml_and_json_parse_check": "passed"
+  },
+  "excluded_execution": {
+    "workflow_run_id": 40132530390,
+    "purpose": "timeout fallback for the long SSM-Belief shard",
+    "included_in_formal_results": false,
+    "reason": "the original 80-run SSM-Belief shard and original aggregate completed successfully"
+  }
+}

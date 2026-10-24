@@ -1,0 +1,16 @@
+{
+  "expected_runs": 250,
+  "actual_runs": 250,
+  "sweeps": 6,
+  "panel": [
+    "S4_boundary_handoff",
+    "S8_maneuver"
+  ],
+  "seeds": [
+    2001,
+    2002,
+    2003,
+    2004,
+    2005
+  ]
+}

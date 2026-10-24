@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "experiment_revision": "geometry-v2-central-roi-20261024",
+  "configuration_commit": "2fdde56dfa2c0348310dd80b2444391c588be49c",
+  "coordinate_frame": "ENU metres; x east, y north, z up",
+  "devices": {
+    "zr10_25": {
+      "position_m": [
+        0,
+        -50,
+        2
+      ],
+      "mount_rpy_deg": [
+        0,
+        55,
+        63.434948823
+      ]
+    },
+    "zr10_26": {
+      "position_m": [
+        0,
+        50,
+        2
+      ],
+      "mount_rpy_deg": [
+        0,
+        55,
+        -63.434948823
+      ]
+    },
+    "zr10_27": {
+      "position_m": [
+        50,
+        -50,
+        2
+      ],
+      "mount_rpy_deg": [
+        0,
+        55,
+        116.565051177
+      ]
+    },
+    "zr10_28": {
+      "position_m": [
+        50,
+        50,
+        2
+      ],
+      "mount_rpy_deg": [
+        0,
+        55,
+        -116.565051177
+      ]
+    }
+  },
+  "task_roi_m": {
+    "x": [
+      10,
+      40
+    ],
+    "y": [
+      -40,
+      40
+    ],
+    "z": [
+      10,
+      60
+    ]
+  },
+  "sensing": {
+    "research_max_effective_range_m": 100,
+    "generic_fusion_max_range_m": 100
+  },
+  "search_grid": {
+    "shape": [
+      3,
+      7,
+      3
+    ],
+    "cell_count": 63,
+    "minimum_range_and_gimbal_reachable_devices": 2
+  },
+  "dense_roi_sample_audit": {
+    "shape": [
+      16,
+      41,
+      26
+    ],
+    "sample_count": 17056,
+    "minimum_devices_within_100m_and_gimbal_limits": 2,
+    "worst_second_nearest_distance_m": 82.28152891141487,
+    "worst_sample_point_m": [
+      10,
+      -7.5,
+      60
+    ]
+  },
+  "calibration_verified": false,
+  "tests": {
+    "local_pytest_passed": 222,
+    "local_pytest_skipped": 2,
+    "freeze_ci_workflow_run_id": 40108812371,
+    "freeze_ci_conclusion": "success"
+  }
+}

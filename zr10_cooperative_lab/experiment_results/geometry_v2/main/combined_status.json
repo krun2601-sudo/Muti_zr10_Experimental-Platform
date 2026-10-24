@@ -1,0 +1,31 @@
+{
+  "expected_runs": 560,
+  "actual_runs": 560,
+  "methods": [
+    "fixed_scan",
+    "greedy",
+    "weighted_rh",
+    "classical_ptz",
+    "info_planner",
+    "ssm_belief",
+    "ecprh"
+  ],
+  "runs_per_method": {
+    "classical_ptz": 80,
+    "ecprh": 80,
+    "fixed_scan": 80,
+    "greedy": 80,
+    "info_planner": 80,
+    "ssm_belief": 80,
+    "weighted_rh": 80
+  },
+  "source_status_files": [
+    "runs/paper_test_inputs/paper-test-main-classical_ptz-7cb5a65bba83ad419b6b2ffb51fc5335c68ef967/batch_status.json",
+    "runs/paper_test_inputs/paper-test-main-fixed_scan-7cb5a65bba83ad419b6b2ffb51fc5335c68ef967/batch_status.json",
+    "runs/paper_test_inputs/paper-test-main-weighted_rh-7cb5a65bba83ad419b6b2ffb51fc5335c68ef967/batch_status.json",
+    "runs/paper_test_inputs/paper-test-main-ssm_belief-7cb5a65bba83ad419b6b2ffb51fc5335c68ef967/batch_status.json",
+    "runs/paper_test_inputs/paper-test-main-info_planner-7cb5a65bba83ad419b6b2ffb51fc5335c68ef967/batch_status.json",
+    "runs/paper_test_inputs/paper-test-main-greedy-7cb5a65bba83ad419b6b2ffb51fc5335c68ef967/batch_status.json",
+    "runs/paper_test_inputs/paper-test-main-ecprh-7cb5a65bba83ad419b6b2ffb51fc5335c68ef967/batch_status.json"
+  ]
+}

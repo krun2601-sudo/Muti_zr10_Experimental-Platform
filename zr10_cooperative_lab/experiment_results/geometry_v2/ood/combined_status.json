@@ -1,0 +1,13 @@
+{
+  "expected_runs": 280,
+  "actual_runs": 280,
+  "runs_per_method": {
+    "classical_ptz": 40,
+    "ecprh": 40,
+    "fixed_scan": 40,
+    "greedy": 40,
+    "info_planner": 40,
+    "ssm_belief": 40,
+    "weighted_rh": 40
+  }
+}
