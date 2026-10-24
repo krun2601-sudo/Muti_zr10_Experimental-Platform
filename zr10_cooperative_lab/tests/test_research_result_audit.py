@@ -24,7 +24,10 @@ def _synthetic_tables(tmp_path: Path):
     manifest = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))
     methods = manifest["methods"]["primary"]
     reference = manifest["statistics"]["reference_method"]
-    scenarios = [Path(x).stem for x in manifest["splits"]["test_main"]["scenarios"]]
+    scenarios = []
+    for item in manifest["splits"]["test_main"]["scenarios"]:
+        data = yaml.safe_load((MANIFEST.parent / item).read_text(encoding="utf-8"))
+        scenarios.append(data["policy"]["research"]["scenario"]["id"])
     seeds = manifest["splits"]["test_main"]["seeds"]
     primary = [x["name"] for x in manifest["metrics"]["primary"]]
 
@@ -37,7 +40,7 @@ def _synthetic_tables(tmp_path: Path):
                     row[metric] = float(method_index + metric_index)
                 # Monitoring visibility is undefined in the no-target scenario.
                 row["research_monitor_visible_ratio"] = (
-                    "nan" if scenario == "S0_no_target" else 0.5 + 0.01 * method_index
+                    "nan" if scenario == "S0-no-target" else 0.5 + 0.01 * method_index
                 )
                 runs.append(row)
 

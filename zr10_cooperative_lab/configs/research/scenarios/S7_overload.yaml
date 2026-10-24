@@ -4,12 +4,12 @@ policy:
   research:
     scenario:
       id: S7-overload
-      roi: {x: [100,160], y: [-50,50], z: [35,85]}
+      roi: {x: [10,40], y: [-40,40], z: [10,60]}
       remove_outside_roi: true
       targets:
-        - {id: private_target_1, start_s: 8, end_s: 82, trajectory: cv, position_m: [100,-47,42], velocity_mps: [1.25,0.35,0.10]}
-        - {id: private_target_2, start_s: 10, end_s: 84, trajectory: cv, position_m: [100,46,48], velocity_mps: [1.20,-0.25,0.12]}
-        - {id: private_target_3, start_s: 12, end_s: 86, trajectory: cv, position_m: [100,-30,77], velocity_mps: [1.15,0.18,-0.05]}
-        - {id: private_target_4, start_s: 14, end_s: 88, trajectory: cv, position_m: [100,29,82], velocity_mps: [1.10,-0.15,-0.06]}
-        - {id: private_target_5, start_s: 16, end_s: 90, trajectory: cv, position_m: [100,-4,38], velocity_mps: [1.05,0.05,0.20]}
-        - {id: private_target_6, start_s: 18, end_s: 90, trajectory: cv, position_m: [100,5,69], velocity_mps: [1.00,-0.04,-0.02]}
+        - {id: private_target_1, start_s: 8, end_s: 82, trajectory: cv, position_m: [10,-37.6,17], velocity_mps: [0.625,0.28,0.10]}
+        - {id: private_target_2, start_s: 10, end_s: 84, trajectory: cv, position_m: [10,36.8,23], velocity_mps: [0.60,-0.20,0.12]}
+        - {id: private_target_3, start_s: 12, end_s: 86, trajectory: cv, position_m: [10,-24,52], velocity_mps: [0.575,0.144,-0.05]}
+        - {id: private_target_4, start_s: 14, end_s: 88, trajectory: cv, position_m: [10,23.2,57], velocity_mps: [0.55,-0.12,-0.06]}
+        - {id: private_target_5, start_s: 16, end_s: 90, trajectory: cv, position_m: [10,-3.2,13], velocity_mps: [0.525,0.04,0.20]}
+        - {id: private_target_6, start_s: 18, end_s: 90, trajectory: cv, position_m: [10,4,44], velocity_mps: [0.50,-0.032,-0.02]}

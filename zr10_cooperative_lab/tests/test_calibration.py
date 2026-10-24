@@ -60,5 +60,8 @@ def test_calibration_command_processes_example_csv(tmp_path):
                  "--output", str(output)]) == 0
     result = json.loads(output.read_text(encoding="utf-8"))
     assert result["success"] and result["rms_angle_deg"] < 1e-5
-    np.testing.assert_allclose(result["config_device_patch"]["mount_rpy_deg"], [0, 25, 0], atol=1e-5)
+    np.testing.assert_allclose(
+        result["config_device_patch"]["mount_rpy_deg"],
+        [0, 55, 63.434948823], atol=1e-5,
+    )
     assert not result["config_device_patch"]["calibration_verified"]

@@ -1,4 +1,5 @@
-# 示例外参与内参仅用于仿真。实机运行前请逐台替换并标记 calibration_verified。
+# geometry-v2（中央任务区）实验配置。坐标和安装角用于仿真；实机必须按同一
+# ENU 基准重新测量，并在控制点验收通过后才能将 calibration_verified 改为 true。
 # ENU: x东/y北/z上（m）；安装姿态顺序 [roll,pitch,yaw]（deg），俯仰向上为正。
 system:
   rate_hz: 10
@@ -15,19 +16,18 @@ policy:
   mode: multi
 
   # 需要观测的三维空间，单位米，与设备 position_m 使用同一坐标系。
-  # 以下是演示区域，实机时替换为你的场地范围。
   roi:
-    x: [ 100, 160 ]
-    y: [ -50, 50 ]
-    z: [ 35, 85 ]
+    x: [ 10, 40 ]
+    y: [ -40, 40 ]
+    z: [ 10, 60 ]
 
   # 使用区域网格生成扫描点。
   # 默认文件中原本有一行具体的 scan_points_m 列表，
   # 必须将那一行替换为 null，不要重复添加同名字段。
   scan_points_m: null
 
-  # x、y、z 方向分别取 3、5、2 个位置，共 30 个扫描点。
-  scan_grid: [ 3, 5, 2 ]
+  # 约 10 m 的笛卡尔间距，共 4×9×6=216 个扫描点。
+  scan_grid: [ 4, 9, 6 ]
 
   # 同组设备到达目标方向后驻留 2 秒，再切换扫描点。
   scan_dwell_s: 2.0
@@ -36,7 +36,7 @@ policy:
   minimum_dwell_s: 0.8
   assignment_switch_penalty: 0.35
   prediction_horizon_s: 0.2
-  ray_search_distance_m: 140
+  ray_search_distance_m: 100
   search_hypothesis_ttl_s: 1.5
 action_space:
   # 消融实验只改变此列表；zoom 开放后仍需覆盖倍率范围的实测内参。
@@ -71,13 +71,13 @@ simulation:
   zoom_rate_per_s: 3
   targets:
     - id: uav_1
-      position_m: [110, -15, 62]
-      amplitude_m: [8, 20, 5]
+      position_m: [15, -12, 37]
+      amplitude_m: [4, 16, 5]
       period_s: 36
       phase_rad: [0, 1.5707963, 0.4]
     - id: uav_2
-      position_m: [135, 22, 76]
-      amplitude_m: [5, -20, 7]
+      position_m: [27.5, 17.6, 51]
+      amplitude_m: [2.5, -16, 7]
       period_s: 45
       phase_rad: [0.6, 2.1707963, 0.2]
   outages: []
@@ -86,15 +86,17 @@ devices:
     id: zr10_25
     ip: 192.168.144.25
     port: 37260
-    position_m: [0, -30, 2]
-    mount_rpy_deg: [0, 25, 0]
-    calibration_verified: true  # 布尔值标记；仍需用实测控制点验收标定
+    position_m: [0, -50, 2]
+    # 四台设备的安装零位均指向任务区中心 (25,0)，安装仰角 55°。
+    mount_rpy_deg: [0, 55, 63.434948823]
+    calibration_verified: false
     rtsp_url: rtsp://192.168.144.25:8554/main.264
     yaw_limits_deg: [-130, 130]
     pitch_limits_deg: [-85, 25]
     zoom_limits: [1, 10]
     initial_yaw_deg: 0
-    initial_pitch_deg: 0
+    # 安装仰角 55° + 本地俯仰 -25°，初始光轴约为世界系仰角 30°。
+    initial_pitch_deg: -25
     initial_zoom: 1
     max_slew_dps: 30
     capabilities: {zoom: true, focus_direction: false, autofocus: false, gimbal_mode: false}
@@ -126,15 +128,18 @@ devices:
   - <<: *station
     id: zr10_26
     ip: 192.168.144.26
-    position_m: [0, 30, 2]
+    position_m: [0, 50, 2]
+    mount_rpy_deg: [0, 55, -63.434948823]
     rtsp_url: rtsp://192.168.144.26:8554/main.264
   - <<: *station
     id: zr10_27
     ip: 192.168.144.27
-    position_m: [30, -30, 2]
+    position_m: [50, -50, 2]
+    mount_rpy_deg: [0, 55, 116.565051177]
     rtsp_url: rtsp://192.168.144.27:8554/main.264
   - <<: *station
     id: zr10_28
     ip: 192.168.144.28
-    position_m: [30, 30, 2]
+    position_m: [50, 50, 2]
+    mount_rpy_deg: [0, 55, -116.565051177]
     rtsp_url: rtsp://192.168.144.28:8554/main.264

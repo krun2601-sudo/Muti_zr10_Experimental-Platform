@@ -4,7 +4,7 @@ policy:
   research:
     scenario:
       id: S11-heldout-handoff-contention
-      roi: {x: [100,160], y: [-50,50], z: [35,85]}
+      roi: {x: [10,40], y: [-40,40], z: [10,60]}
       remove_outside_roi: true
       targets:
         - id: private_target_1
@@ -12,25 +12,25 @@ policy:
           end_s: 82
           trajectory: waypoint
           waypoints:
-            - {t_s: 6, position_m: [100,-48,52]}
-            - {t_s: 32, position_m: [123,-8,57]}
-            - {t_s: 58, position_m: [145,34,62]}
-            - {t_s: 82, position_m: [159,48,66]}
+            - {t_s: 6, position_m: [10,-38.4,27]}
+            - {t_s: 32, position_m: [21.5,-6.4,32]}
+            - {t_s: 58, position_m: [32.5,27.2,37]}
+            - {t_s: 82, position_m: [39.5,38.4,41]}
         - id: private_target_2
           start_s: 10
           end_s: 80
           trajectory: waypoint
           waypoints:
-            - {t_s: 10, position_m: [101,46,68]}
-            - {t_s: 36, position_m: [126,12,65]}
-            - {t_s: 60, position_m: [146,-30,62]}
-            - {t_s: 80, position_m: [159,-47,60]}
+            - {t_s: 10, position_m: [10.5,36.8,43]}
+            - {t_s: 36, position_m: [23,9.6,40]}
+            - {t_s: 60, position_m: [33,-24,37]}
+            - {t_s: 80, position_m: [39.5,-37.6,35]}
         - id: private_target_3
           start_s: 24
           end_s: 88
           trajectory: sin
-          position_m: [104,0,78]
-          velocity_mps: [1.0,0.0,-0.08]
-          amplitude_m: [0,18,3]
+          position_m: [12,0,53]
+          velocity_mps: [0.5,0.0,-0.08]
+          amplitude_m: [0,14.4,3]
           period_s: 22
           phase_rad: [0,1.0,0.3]

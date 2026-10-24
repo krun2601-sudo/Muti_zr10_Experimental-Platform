@@ -4,7 +4,7 @@ policy:
   research:
     scenario:
       id: S8-maneuver
-      roi: {x: [100,160], y: [-50,50], z: [35,85]}
+      roi: {x: [10,40], y: [-40,40], z: [10,60]}
       remove_outside_roi: true
       targets:
         - id: private_target_1
@@ -12,18 +12,18 @@ policy:
           end_s: 82
           trajectory: waypoint
           waypoints:
-            - {t_s: 6, position_m: [101,-40,48]}
-            - {t_s: 21, position_m: [124,-18,58]}
-            - {t_s: 30, position_m: [135,20,63]}
-            - {t_s: 43, position_m: [119,42,69]}
-            - {t_s: 58, position_m: [149,5,76]}
-            - {t_s: 80, position_m: [159,-38,82]}
+            - {t_s: 6, position_m: [10.5,-32,23]}
+            - {t_s: 21, position_m: [22,-14.4,33]}
+            - {t_s: 30, position_m: [27.5,16,38]}
+            - {t_s: 43, position_m: [19.5,33.6,44]}
+            - {t_s: 58, position_m: [34.5,4,51]}
+            - {t_s: 80, position_m: [39.5,-30.4,57]}
         - id: private_target_2
           start_s: 20
           end_s: 84
           trajectory: turn
-          position_m: [102,35,74]
-          speed_mps: 2.6
+          position_m: [11,28,49]
+          speed_mps: 2.08
           heading_deg: -35
           turn_rate_dps: 6.0
           climb_mps: -0.12

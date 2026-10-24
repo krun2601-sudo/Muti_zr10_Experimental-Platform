@@ -42,20 +42,24 @@ def test_manifest_pins_baselines_and_test_gate_matches_pretest_learning_decision
     path = Path("configs/research/paper_experiment_manifest.yaml")
     manifest = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
     frozen = manifest["frozen_inputs"]
-    assert frozen["baseline_selection_dir"] == "frozen_baselines"
     assert "learning_selection_dir" not in frozen
-    directory = path.parent / frozen["baseline_selection_dir"]
-    assert directory.is_dir()
-
     expected = set(manifest["methods"]["parameterized_baselines"])
     hashes = frozen["baseline_selection_sha256"]
-    assert set(hashes) == expected
     assert expected.issubset(set(manifest["methods"]["primary"]))
-    for method, expected_hash in hashes.items():
-        selection = directory / f"selected_{method}.json"
-        assert selection.is_file(), method
-        actual = hashlib.sha256(selection.read_bytes()).hexdigest()
-        assert actual == expected_hash, (method, expected_hash, actual)
+
+    if bool(frozen["paper_test_unlocked"]):
+        assert frozen["baseline_selection_dir"]
+        directory = path.parent / frozen["baseline_selection_dir"]
+        assert directory.is_dir()
+        assert set(hashes) == expected
+        for method, expected_hash in hashes.items():
+            selection = directory / f"selected_{method}.json"
+            assert selection.is_file(), method
+            actual = hashlib.sha256(selection.read_bytes()).hexdigest()
+            assert actual == expected_hash, (method, expected_hash, actual)
+    else:
+        assert frozen["baseline_selection_dir"] is None
+        assert hashes == {}
 
     decision = manifest.get("pretest_learning_decision")
     if bool(frozen["paper_test_unlocked"]):
@@ -65,7 +69,10 @@ def test_manifest_pins_baselines_and_test_gate_matches_pretest_learning_decision
         assert set(manifest["methods"]["primary"]).isdisjoint(
             set(manifest["methods"].get("learning_optional_after_training", [])))
     else:
-        assert decision is None or decision.get("main_table") != "omit_optional_learning_baselines"
+        if decision is not None:
+            assert decision.get("main_table") == "omit_optional_learning_baselines"
+            assert decision.get("made_before_any_heldout_run") is True
+            assert decision.get("applies_to_revision") == manifest["experiment_revision"]["id"]
 
 
 def test_paper_test_gate_is_locked_or_pretest_omission_is_explicit(tmp_path):
@@ -90,7 +97,7 @@ def test_non_manifest_baseline_selection_directory_is_rejected_without_running_t
     manifest_path, manifest = load_manifest("configs/research/paper_experiment_manifest.yaml")
     fake = tmp_path / "replacement"
     fake.mkdir()
-    with pytest.raises(ValueError, match="does not match frozen manifest identity"):
+    with pytest.raises(ValueError, match="contains no frozen"):
         _require_frozen_input_dir(
             manifest_path, manifest, "baseline_selection_dir", fake,
             label="frozen validation selections",
@@ -177,7 +184,7 @@ def test_mappo_cost_penalizes_active_but_undiscovered_target():
         "start_s": 0.0,
         "end_s": 0.6,
         "trajectory": "cv",
-        "position_m": [130.0, 0.0, 60.0],
+        "position_m": [25.0, 0.0, 35.0],
         "velocity_mps": [0.0, 0.0, 0.0],
     }]
     env = ResearchMARLEnv(cfg, seed=7)

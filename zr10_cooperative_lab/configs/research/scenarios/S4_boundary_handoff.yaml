@@ -4,7 +4,7 @@ policy:
   research:
     scenario:
       id: S4-boundary-handoff
-      roi: {x: [100,160], y: [-50,50], z: [35,85]}
+      roi: {x: [10,40], y: [-40,40], z: [10,60]}
       remove_outside_roi: true
       targets:
         - id: private_target_1
@@ -12,8 +12,8 @@ policy:
           end_s: 75
           trajectory: waypoint
           waypoints:
-            - {t_s: 5, position_m: [101,-47,48]}
-            - {t_s: 22, position_m: [124,-8,58]}
-            - {t_s: 39, position_m: [150,43,66]}
-            - {t_s: 55, position_m: [132,3,74]}
-            - {t_s: 72, position_m: [158,-45,80]}
+            - {t_s: 5, position_m: [10.5,-37.6,23]}
+            - {t_s: 22, position_m: [22,-6.4,33]}
+            - {t_s: 39, position_m: [35,34.4,41]}
+            - {t_s: 55, position_m: [26,2.4,49]}
+            - {t_s: 72, position_m: [39,-36,55]}

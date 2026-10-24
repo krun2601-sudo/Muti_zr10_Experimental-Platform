@@ -6,7 +6,7 @@ This document separates engineering pilots from paper results and records the ru
 
 ## 1. Task and information fairness
 
-MAPPO is a CTDE baseline for the same four-device persistent-search / continuous-monitoring task used by the model-based methods. The actor receives only policy-available anonymous target beliefs, device state/readiness, and the complete 65-cell persistent-search state. Hidden target truth may be used only by the training reward/cost, never by the actor observation.
+MAPPO is a CTDE baseline for the same four-device persistent-search / continuous-monitoring task used by the model-based methods. In geometry-v2 the actor receives only policy-available anonymous target beliefs, device state/readiness, and the complete 63-cell persistent-search state. Hidden target truth may be used only by the training reward/cost, never by the actor observation.
 
 The paper MAPPO development baseline uses the same `RiskAwarePrimitiveFactory` as the model-based methods. Each device therefore chooses among the same physically executable A/E/Zoom primitives, including the same slew, zoom, settling, visibility-risk, sensing-quality, search-candidate, target-candidate, and shared-FOV assumptions. Candidate padding is explicit (`max_candidates=512`) and a larger candidate set must raise an error rather than be silently truncated.
 

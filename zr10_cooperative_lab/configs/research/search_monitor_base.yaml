@@ -32,7 +32,8 @@ policy:
       reference_target_extent_m: 0.25
       discovery_min_pixels: 6.0
       monitor_min_pixels: 12.0
-      max_effective_range_m: 500.0
+      # 论文实验的统一硬探测距离；几何可见但超过 100 m 不计为有效观测。
+      max_effective_range_m: 100.0
     perception:
       seed: 7
       detection_probability: 0.96
@@ -42,17 +43,16 @@ policy:
       initial_covariance_m2: 1.0
       coast_timeout_s: 3.0
       random_time_bin_s: 0.1
-    # Fixed EO search is directional. The task grid is therefore an angular shell
-    # around the four-station centroid, converted internally to ordinary ENU points
-    # so the existing 3-D control-center visualization remains valid.
+    # geometry-v2 直接在中央任务区内维护持久搜索栅格，避免算法继续搜索旧的
+    # 170 m 远距角域。3×7×3=63 个单元，并保持与原 65 单元任务相近的计算预算。
     search:
       domain:
-        type: angular_shell
-        origin_m: network_centroid
-        azimuth_deg: [-75, 75]
-        elevation_deg: [8, 38]
-        range_m: 170
-      grid: [13, 5, 1]
+        type: cartesian
+      roi:
+        x: [10, 40]
+        y: [-40, 40]
+        z: [10, 60]
+      grid: [3, 7, 3]
       initial_age_s: 10.0
       age_cap_s: 120.0
     planning:
@@ -71,9 +71,7 @@ policy:
       inter_sample_motion_factor: 0.5
       fov_margin_deg: 0.25
       handover_overlap_s: 0.5
-      # At the nominal angular-shell range, 3x is approximately the first level
-      # meeting the public discovery-quality threshold; monitoring generally needs
-      # a higher zoom. The thresholds, not these comments, decide actual validity.
+      # 在 100 m 硬距离上限内，3x 满足发现阈值，4x 及以上用于持续监视。
       search_zoom_levels: [3.0]
       tracking_zoom_levels: [4.0, 6.0, 8.0, 10.0]
       action_ttl_s: 0.8
@@ -83,31 +81,31 @@ policy:
       classical_ptz: {track_weight: 4.0, search_weight: 1.0, risk_weight: 2.0, motion_weight: 0.15}
       info_planner: {track_information_weight: 1.0, discovery_weight: 1.0, motion_weight: 0.05}
       ssm_belief: {gamma: 0.92, monitor_weight: 4.0, search_weight: 1.0, motion_weight: 0.08}
-      # Learning baselines receive all 65 search cells and select from the same
+      # Learning baselines receive all 63 search cells and select from the same
       # RiskAwarePrimitiveFactory action set used by the paper methods. Padding to
       # 512 candidates is explicit and never silently truncates a larger set.
-      mappo: {max_targets: 8, top_search_cells: 65, max_candidates: 512, device: cpu}
-      safe_mappo: {max_targets: 8, top_search_cells: 65, max_candidates: 512, device: cpu}
+      mappo: {max_targets: 8, top_search_cells: 63, max_candidates: 512, device: cpu}
+      safe_mappo: {max_targets: 8, top_search_cells: 63, max_candidates: 512, device: cpu}
     scenario:
       id: S2-staggered
       roi:
-        x: [100, 160]
-        y: [-50, 50]
-        z: [35, 85]
+        x: [10, 40]
+        y: [-40, 40]
+        z: [10, 60]
       remove_outside_roi: true
       targets:
         - id: private_target_1
           start_s: 6
           end_s: 60
           trajectory: cv
-          position_m: [100, -38, 52]
-          velocity_mps: [2.0, 1.0, 0.15]
+          position_m: [10, -30.4, 27]
+          velocity_mps: [1.0, 0.8, 0.15]
         - id: private_target_2
           start_s: 18
           end_s: 70
           trajectory: turn
-          position_m: [102, 32, 66]
-          speed_mps: 2.4
+          position_m: [11, 25.6, 41]
+          speed_mps: 1.92
           heading_deg: -18
           turn_rate_dps: -2.5
           climb_mps: -0.05
@@ -115,9 +113,9 @@ policy:
           start_s: 32
           end_s: 85
           trajectory: sin
-          position_m: [104, -8, 73]
-          velocity_mps: [1.6, 0.15, -0.05]
-          amplitude_m: [0, 12, 3]
+          position_m: [12, -6.4, 48]
+          velocity_mps: [0.8, 0.12, -0.05]
+          amplitude_m: [0, 9.6, 3]
           period_s: 24
           phase_rad: [0, 0.2, 1.0]
 

@@ -15,7 +15,7 @@ jobs:
   ood-method:
     if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[paper-experiments-cvfix]') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
@@ -36,7 +36,7 @@ jobs:
             --manifest configs/research/paper_experiment_manifest.yaml \
             --split test_ood --methods "$METHOD" \
             --output "runs/paper_test_ood/$METHOD" \
-            --baseline-selections configs/research/frozen_baselines \
+            --baseline-selections configs/research/frozen_baselines_geometry_v2 \
             --no-paired
       - name: Audit OOD shard
         working-directory: zr10_cooperative_lab

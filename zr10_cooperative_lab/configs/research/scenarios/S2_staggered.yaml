@@ -3,17 +3,17 @@ policy:
   research:
     scenario:
       id: S2-staggered
-      roi: {x: [100,160], y: [-50,50], z: [35,85]}
+      roi: {x: [10,40], y: [-40,40], z: [10,60]}
       remove_outside_roi: true
       targets:
-        - {id: private_target_1, start_s: 6, end_s: 60, trajectory: cv, position_m: [100,-38,52], velocity_mps: [2.0,1.0,0.15]}
-        - {id: private_target_2, start_s: 18, end_s: 70, trajectory: turn, position_m: [102,32,66], speed_mps: 2.4, heading_deg: -18, turn_rate_dps: -2.5, climb_mps: -0.05}
+        - {id: private_target_1, start_s: 6, end_s: 60, trajectory: cv, position_m: [10,-30.4,27], velocity_mps: [1.0,0.8,0.15]}
+        - {id: private_target_2, start_s: 18, end_s: 70, trajectory: turn, position_m: [11,25.6,41], speed_mps: 1.92, heading_deg: -18, turn_rate_dps: -2.5, climb_mps: -0.05}
         - id: private_target_3
           start_s: 32
           end_s: 85
           trajectory: sin
-          position_m: [104,-8,73]
-          velocity_mps: [1.6,0.15,-0.05]
-          amplitude_m: [0,12,3]
+          position_m: [12,-6.4,48]
+          velocity_mps: [0.8,0.12,-0.05]
+          amplitude_m: [0,9.6,3]
           period_s: 24
           phase_rad: [0,0.2,1.0]

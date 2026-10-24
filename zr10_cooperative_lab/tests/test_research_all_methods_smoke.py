@@ -23,7 +23,7 @@ def test_primary_nonlearning_method_completes_common_headless_loop(tmp_path, met
         "start_s": 0.0,
         "end_s": 0.8,
         "trajectory": "cv",
-        "position_m": [130.0, 0.0, 60.0],
+        "position_m": [25.0, 0.0, 35.0],
         "velocity_mps": [0.5, 0.1, 0.0],
     }]
     run_dir = Path(run_research_simulation(cfg, method, tmp_path / method, seed=123))

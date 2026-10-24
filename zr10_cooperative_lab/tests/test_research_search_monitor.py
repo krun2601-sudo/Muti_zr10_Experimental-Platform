@@ -54,7 +54,7 @@ def test_virtual_perception_exposes_anonymous_track_not_truth_id():
     c.policy["research"]["perception"]["detection_probability"] = 1.0
     perception = VirtualPerception(c)
     device = c.active_devices[0]
-    target = TruthTarget("private-secret-target", 1.0, (120.0, -25.0, 58.0), (1.0, 0.0, 0.0))
+    target = TruthTarget("private-secret-target", 1.0, (25.0, 0.0, 35.0), (1.0, 0.0, 0.0))
     yaw, pitch = world_to_gimbal_angles(target.position, device)
     # Use a quality-valid discovery zoom. The purpose of this test is anonymity,
     # not the legacy assumption that 1x geometric inclusion guarantees detection.

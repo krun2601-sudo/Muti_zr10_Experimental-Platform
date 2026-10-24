@@ -34,7 +34,7 @@ jobs:
           python -m compileall -q zr10_cooperative_lab/zr10lab/models.py zr10_cooperative_lab/zr10lab/recording.py
       - name: Run research correctness tests
         working-directory: zr10_cooperative_lab
-        run: pytest -q tests/test_research_search_monitor.py tests/test_research_cadence.py tests/test_research_priority_metrics.py tests/test_research_protocol.py tests/test_research_all_methods_smoke.py tests/test_research_effective_sensing.py tests/test_research_ssm_params.py
+        run: pytest -q tests/test_geometry_v2_configuration.py tests/test_research_search_monitor.py tests/test_research_cadence.py tests/test_research_priority_metrics.py tests/test_research_protocol.py tests/test_research_all_methods_smoke.py tests/test_research_effective_sensing.py tests/test_research_ssm_params.py tests/test_frozen_baseline_selections.py
       - name: Run core platform regression subset
         working-directory: zr10_cooperative_lab
         run: pytest -q tests/test_geometry.py tests/test_learning.py tests/test_control_modes.py
@@ -131,7 +131,7 @@ jobs:
       matrix:
         method: [weighted_rh, classical_ptz, info_planner, ssm_belief]
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -245,7 +245,7 @@ jobs:
       matrix:
         method: [fixed_scan, greedy, weighted_rh, classical_ptz, info_planner, ssm_belief, ecprh]
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -290,7 +290,7 @@ jobs:
             --split test_main \
             --methods "$METHOD" \
             --output "runs/paper_test_main/$METHOD" \
-            --baseline-selections configs/research/frozen_baselines \
+            --baseline-selections configs/research/frozen_baselines_geometry_v2 \
             --no-paired
       - name: Audit shard completeness
         working-directory: zr10_cooperative_lab
@@ -408,11 +408,15 @@ jobs:
           overall=[r for r in rows if r['scope']=='overall']
           assert overall
           # 4 scenarios x 20 paired environment seeds for every primary competitor.
-          assert all(int(r['n_pairs'])==80 for r in overall), sorted({r['n_pairs'] for r in overall})
           status=json.loads((root/'combined_status.json').read_text())
           assert status['actual_runs']==560
           print('combined held-out main-test audit OK')
           PY
+          python -m zr10lab.research.result_audit \
+            runs/paper_test_main_combined/run_metrics.csv \
+            runs/paper_test_main_combined/paired_comparisons.csv \
+            --manifest configs/research/paper_experiment_manifest.yaml \
+            --output runs/paper_test_main_combined/integrity_audit.json
       - name: Upload frozen combined main-test result
         uses: actions/upload-artifact@v4
         with:

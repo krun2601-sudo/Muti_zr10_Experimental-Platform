@@ -12,12 +12,12 @@ from zr10lab.research.runner import _policy_builder_name
 
 def test_mappo_uses_frozen_full_grid_and_candidate_capacity():
     cfg = load_config("configs/research/scenarios/S1_single.yaml")
-    assert _capacity(cfg) == (8, 65, 512)
+    assert _capacity(cfg) == (8, 63, 512)
     env = MultiScenarioCandidateEnv([cfg], network_seed=5101, episode_seeds=[1001, 1002])
     assert env.max_targets == 8
-    assert env.top_search_cells == 65
+    assert env.top_search_cells == 63
     assert env.max_candidates == 512
-    assert env.obs_dim == 7 + 8 * 10 + 65 * 3 + 3
+    assert env.obs_dim == 7 + 8 * 10 + 63 * 3 + 3
     obs, state, mask = env.reset()
     assert obs.shape == (len(cfg.active_devices), env.obs_dim)
     assert state.shape == (len(cfg.active_devices) * env.obs_dim,)

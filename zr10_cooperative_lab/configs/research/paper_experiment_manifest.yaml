@@ -2,18 +2,24 @@ schema_version: 1
 study: persistent_search_continuous_monitoring
 base_config: search_monitor_base.yaml
 
-# Paper-test inputs are immutable identities resolved relative to this manifest.
-# The seven primary methods are frozen below. Optional learning baselines were
-# explicitly omitted before any held-out result was inspected; see
-# pretest_learning_decision and docs/MAPPO_BASELINE_PROTOCOL.md.
+experiment_revision:
+  id: geometry-v2-central-roi-20261024
+  supersedes: geometry-v1-remote-angular-shell
+  change_reason: move the task volume inside the four-device rectangle and enforce a 100 m effective sensing limit
+  device_xy_m: [[0,-50], [0,50], [50,-50], [50,50]]
+  task_roi_m: {x: [10,40], y: [-40,40], z: [10,60]}
+  search_domain: cartesian_roi_3x7x3
+  max_effective_range_m: 100
+  core_algorithms_changed: false
+  prior_results_valid_for_this_revision: false
+
+# geometry-v2 changes the geometry and task distribution, so all old validation
+# selections and held-out results are invalid for this revision. Keep the test
+# gate locked until new validation-only selections are committed with SHA-256 IDs.
 frozen_inputs:
-  paper_test_unlocked: true
-  baseline_selection_dir: frozen_baselines
-  baseline_selection_sha256:
-    weighted_rh: f9d2e1a68432478c3558d9b59e61b3bf27ec4fd85a9b27300c2a3ddf419fb8a3
-    classical_ptz: a05ca8d5368d4efb3edc90e7c131df91db17842d03b0842a204cbe9c39ebb72a
-    info_planner: eaf5f13783b2b56caf6955dc1b804e6c1641d2c5a796d5b764d9a797670a1ae2
-    ssm_belief: 4808e293a902276d83831ef7bca60d1239a064119dec71c27a597018ad051e99
+  paper_test_unlocked: false
+  baseline_selection_dir: null
+  baseline_selection_sha256: {}
 
 # Splits were frozen before full Monte Carlo results were generated.
 splits:
@@ -56,7 +62,8 @@ methods:
 pretest_learning_decision:
   made_before_any_heldout_run: true
   main_table: omit_optional_learning_baselines
-  rationale: repeated_train_validation_diagnostics_failed_minimum_discovery_gate
+  applies_to_revision: geometry-v2-central-roi-20261024
+  rationale: preserve_the_precommitted_nonlearning_primary_scope; old_learning_checkpoints_are_incompatible_with_the_geometry_v2_search_representation
   final_diagnostic:
     implementation: candidate_feature_v4_agentwise
     commit: 2f2fc6b59eb3f8c31182c9f6c88e5e24e4b2adfe

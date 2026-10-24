@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 
 from zr10lab.research.protocol import _read_baseline_selections
@@ -15,9 +16,13 @@ EXPECTED = {
 }
 
 
-def test_frozen_baseline_selections_are_validation_only_and_loadable():
+def test_archived_geometry_v1_baseline_selections_remain_auditable():
     root = Path("configs/research/frozen_baselines")
-    loaded = _read_baseline_selections(root, METHODS)
+    hashes = {
+        method: hashlib.sha256((root / f"selected_{method}.json").read_bytes()).hexdigest()
+        for method in METHODS
+    }
+    loaded = _read_baseline_selections(root, METHODS, expected_sha256=hashes)
     assert set(loaded) == set(METHODS)
 
     for method in METHODS:
