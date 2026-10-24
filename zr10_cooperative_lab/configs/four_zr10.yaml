@@ -46,7 +46,8 @@ fusion:
   min_ray_angle_deg: 2.0
   max_condition_number: 100000
   max_residual_m: 2.0
-  max_range_m: 2000
+  # 与 geometry-v2 的统一有效探测距离一致；超过 100 m 的交会结果不进入跟踪。
+  max_range_m: 100
   measurement_floor_m: 0.05
   process_accel_std_mps2: 3.0
   track_gate_mahalanobis: 16.27

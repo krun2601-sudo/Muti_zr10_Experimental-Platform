@@ -25,6 +25,7 @@ def test_geometry_v2_has_one_canonical_device_and_roi_configuration():
     assert cfg.policy["research"]["scenario"]["roi"] == EXPECTED_ROI
     assert cfg.policy["research"]["search"]["roi"] == EXPECTED_ROI
     assert cfg.policy["research"]["sensing"]["max_effective_range_m"] == 100.0
+    assert cfg.fusion["max_range_m"] == 100
     assert cfg.policy["research"]["search"]["domain"]["type"] == "cartesian"
     assert cfg.policy["research"]["search"]["grid"] == [3, 7, 3]
 
