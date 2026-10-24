@@ -15,6 +15,13 @@ EXPECTED = {
     "ssm_belief": {"gamma": 0.98, "monitor_weight": 2.0, "motion_weight": 0.04, "search_weight": 2.0},
 }
 
+GEOMETRY_V2_EXPECTED = {
+    "weighted_rh": {"loss_weight": 3.0, "motion_weight": 0.03, "overlap_weight": 3.0, "search_weight": 1.0},
+    "classical_ptz": {"motion_weight": 0.15, "risk_weight": 1.0, "search_weight": 1.0, "track_weight": 2.0},
+    "info_planner": {"discovery_weight": 1.0, "motion_weight": 0.1, "track_information_weight": 0.5},
+    "ssm_belief": {"gamma": 0.98, "monitor_weight": 2.0, "motion_weight": 0.04, "search_weight": 2.0},
+}
+
 
 def test_archived_geometry_v1_baseline_selections_remain_auditable():
     root = Path("configs/research/frozen_baselines")
@@ -41,5 +48,25 @@ def test_archived_geometry_v1_baseline_selections_remain_auditable():
         assert "S9a_ood" not in configs
         assert "S9b_ood" not in configs
         assert "S7_overload" not in configs
+        assert len(document["provenance"]["artifacts"]) == 5
+        assert {row["seed"] for row in document["provenance"]["artifacts"]} == {2001, 2002, 2003, 2004, 2005}
+
+
+def test_geometry_v2_baseline_selections_are_complete_and_validation_only():
+    root = Path("configs/research/frozen_baselines_geometry_v2")
+    hashes = {
+        method: hashlib.sha256((root / f"selected_{method}.json").read_bytes()).hexdigest()
+        for method in METHODS
+    }
+    loaded = _read_baseline_selections(root, METHODS, expected_sha256=hashes)
+    assert {method: loaded[method]["params"] for method in METHODS} == GEOMETRY_V2_EXPECTED
+
+    for method in METHODS:
+        document = json.loads((root / f"selected_{method}.json").read_text(encoding="utf-8"))
+        assert document["experiment_revision"] == "geometry-v2-central-roi-20261024"
+        assert document["validation_seeds"] == [2001, 2002, 2003, 2004, 2005]
+        assert document["evaluated_parameter_count"] == 24
+        assert document["runs_per_parameter_tuple"] == 10
+        assert document["provenance"]["test_splits_used_for_selection"] is False
         assert len(document["provenance"]["artifacts"]) == 5
         assert {row["seed"] for row in document["provenance"]["artifacts"]} == {2001, 2002, 2003, 2004, 2005}

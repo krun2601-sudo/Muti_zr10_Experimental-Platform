@@ -97,7 +97,10 @@ def test_non_manifest_baseline_selection_directory_is_rejected_without_running_t
     manifest_path, manifest = load_manifest("configs/research/paper_experiment_manifest.yaml")
     fake = tmp_path / "replacement"
     fake.mkdir()
-    with pytest.raises(ValueError, match="contains no frozen"):
+    expected = ("does not match frozen manifest identity"
+                if manifest["frozen_inputs"].get("baseline_selection_dir")
+                else "contains no frozen")
+    with pytest.raises(ValueError, match=expected):
         _require_frozen_input_dir(
             manifest_path, manifest, "baseline_selection_dir", fake,
             label="frozen validation selections",

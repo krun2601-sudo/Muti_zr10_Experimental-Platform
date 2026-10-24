@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "experiment_revision": "geometry-v2-central-roi-20261024",
+  "method": "ssm_belief",
+  "selection_rule": "lexicographic validation means over S4/S8 and seeds 2001-2005: missed-target rate, censored detection-delay P95, post-discovery total loss, maximum loss gap, revisit-age P95",
+  "selection_metrics": [
+    "research_missed_target_rate",
+    "research_detection_delay_censored_p95_s",
+    "research_total_loss_s",
+    "research_max_loss_gap_s",
+    "research_revisit_age_p95_s"
+  ],
+  "validation_configs": [
+    "scenarios/S4_boundary_handoff.yaml",
+    "scenarios/S8_maneuver.yaml"
+  ],
+  "validation_seeds": [
+    2001,
+    2002,
+    2003,
+    2004,
+    2005
+  ],
+  "evaluated_parameter_count": 24,
+  "runs_per_parameter_tuple": 10,
+  "selected_params": {
+    "gamma": 0.98,
+    "monitor_weight": 2,
+    "motion_weight": 0.04,
+    "search_weight": 2
+  },
+  "selected_summary": {
+    "param_gamma": 0.98,
+    "param_monitor_weight": 2,
+    "param_motion_weight": 0.04,
+    "param_search_weight": 2,
+    "runs": 10,
+    "research_missed_target_rate": 0,
+    "research_detection_delay_censored_p95_s": 2.9845000000000192,
+    "research_total_loss_s": 18.989999999999963,
+    "research_max_loss_gap_s": 2.1300000000000003,
+    "research_revisit_age_p95_s": 8.93499999999949
+  },
+  "source_files": [
+    "validation-full-ssm_belief-seed-2001-1f209462480d33555d6a49a4be82972700d05b88/tuning_runs.csv",
+    "validation-full-ssm_belief-seed-2002-1f209462480d33555d6a49a4be82972700d05b88/tuning_runs.csv",
+    "validation-full-ssm_belief-seed-2003-1f209462480d33555d6a49a4be82972700d05b88/tuning_runs.csv",
+    "validation-full-ssm_belief-seed-2004-1f209462480d33555d6a49a4be82972700d05b88/tuning_runs.csv",
+    "validation-full-ssm_belief-seed-2005-1f209462480d33555d6a49a4be82972700d05b88/tuning_runs.csv"
+  ],
+  "provenance": {
+    "branch": "research/ecp-rh-experiments",
+    "geometry_configuration_commit": "5622315b5b8e1c80db307d4984e2ce505a469411",
+    "validation_workflow_run_ids": [
+      40097586890
+    ],
+    "data_generation_shas": [
+      "1f209462480d33555d6a49a4be82972700d05b88"
+    ],
+    "parameter_sample_seed": 20261022,
+    "artifacts": [
+      {
+        "seed": 2001,
+        "artifact_id": 12561928449,
+        "workflow_run_id": 40097586890,
+        "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+        "sha256": "f2075d1eda87c345e5cdc2c2b78dc483c5f23beabadd33473424368580e5d33b",
+        "name": "validation-full-ssm_belief-seed-2001-1f209462480d33555d6a49a4be82972700d05b88"
+      },
+      {
+        "seed": 2002,
+        "artifact_id": 12562688227,
+        "workflow_run_id": 40097586890,
+        "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+        "sha256": "7ff2b4f159686151813378758ac64ccc2afa8fb3f38fa82f0afd40b428ef0491",
+        "name": "validation-full-ssm_belief-seed-2002-1f209462480d33555d6a49a4be82972700d05b88"
+      },
+      {
+        "seed": 2003,
+        "artifact_id": 12561783509,
+        "workflow_run_id": 40097586890,
+        "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+        "sha256": "c3a0e789bc1128c4a731158e8aa38d1849be4b47c48ac17983b8b288ef6469bc",
+        "name": "validation-full-ssm_belief-seed-2003-1f209462480d33555d6a49a4be82972700d05b88"
+      },
+      {
+        "seed": 2004,
+        "artifact_id": 12562216773,
+        "workflow_run_id": 40097586890,
+        "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+        "sha256": "ddb0bd7f438d6619c591703d6a43248b57dee5b0272de7624b337941f9af3f87",
+        "name": "validation-full-ssm_belief-seed-2004-1f209462480d33555d6a49a4be82972700d05b88"
+      },
+      {
+        "seed": 2005,
+        "artifact_id": 12561973558,
+        "workflow_run_id": 40097586890,
+        "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+        "sha256": "59af11bc71d07baa5f8969c67a4174f07618dc5e146f97f6192d71fecdd26125",
+        "name": "validation-full-ssm_belief-seed-2005-1f209462480d33555d6a49a4be82972700d05b88"
+      }
+    ],
+    "test_splits_used_for_selection": false
+  }
+}

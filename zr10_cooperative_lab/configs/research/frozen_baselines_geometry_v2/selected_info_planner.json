@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "experiment_revision": "geometry-v2-central-roi-20261024",
+  "method": "info_planner",
+  "selection_rule": "lexicographic validation means over S4/S8 and seeds 2001-2005: missed-target rate, censored detection-delay P95, post-discovery total loss, maximum loss gap, revisit-age P95",
+  "selection_metrics": [
+    "research_missed_target_rate",
+    "research_detection_delay_censored_p95_s",
+    "research_total_loss_s",
+    "research_max_loss_gap_s",
+    "research_revisit_age_p95_s"
+  ],
+  "validation_configs": [
+    "scenarios/S4_boundary_handoff.yaml",
+    "scenarios/S8_maneuver.yaml"
+  ],
+  "validation_seeds": [
+    2001,
+    2002,
+    2003,
+    2004,
+    2005
+  ],
+  "evaluated_parameter_count": 24,
+  "runs_per_parameter_tuple": 10,
+  "selected_params": {
+    "discovery_weight": 1,
+    "motion_weight": 0.1,
+    "track_information_weight": 0.5
+  },
+  "selected_summary": {
+    "param_discovery_weight": 1,
+    "param_motion_weight": 0.1,
+    "param_track_information_weight": 0.5,
+    "runs": 10,
+    "research_missed_target_rate": 0,
+    "research_detection_delay_censored_p95_s": 4.198499999999985,
+    "research_total_loss_s": 72.75000000000061,
+    "research_max_loss_gap_s": 7.969999999999989,
+    "research_revisit_age_p95_s": 6.925999999999606
+  },
+  "source_files": [
+    "validation-full-info_planner-seed-2001-1f209462480d33555d6a49a4be82972700d05b88/tuning_runs.csv",
+    "validation-full-info_planner-seed-2002-1f209462480d33555d6a49a4be82972700d05b88/tuning_runs.csv",
+    "validation-full-info_planner-seed-2003-1f209462480d33555d6a49a4be82972700d05b88/tuning_runs.csv",
+    "validation-full-info_planner-seed-2004-1f209462480d33555d6a49a4be82972700d05b88/tuning_runs.csv",
+    "validation-full-info_planner-seed-2005-1f209462480d33555d6a49a4be82972700d05b88/tuning_runs.csv"
+  ],
+  "provenance": {
+    "branch": "research/ecp-rh-experiments",
+    "geometry_configuration_commit": "5622315b5b8e1c80db307d4984e2ce505a469411",
+    "validation_workflow_run_ids": [
+      40097586890
+    ],
+    "data_generation_shas": [
+      "1f209462480d33555d6a49a4be82972700d05b88"
+    ],
+    "parameter_sample_seed": 20261022,
+    "artifacts": [
+      {
+        "seed": 2001,
+        "artifact_id": 12561718748,
+        "workflow_run_id": 40097586890,
+        "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+        "sha256": "01b7f7d6038b3a39b662cb3e5e7185f3a4e6bd5f6c23e03197f12eb593e9cd4c",
+        "name": "validation-full-info_planner-seed-2001-1f209462480d33555d6a49a4be82972700d05b88"
+      },
+      {
+        "seed": 2002,
+        "artifact_id": 12562655065,
+        "workflow_run_id": 40097586890,
+        "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+        "sha256": "dcb8f51e14b98752084b6da838e9914615b775b19b02381afb112902ead11e8e",
+        "name": "validation-full-info_planner-seed-2002-1f209462480d33555d6a49a4be82972700d05b88"
+      },
+      {
+        "seed": 2003,
+        "artifact_id": 12562975520,
+        "workflow_run_id": 40097586890,
+        "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+        "sha256": "3a050cf2f3061e1b07ffb2ad0d43d93f7dd31110f624a909382db287a7934627",
+        "name": "validation-full-info_planner-seed-2003-1f209462480d33555d6a49a4be82972700d05b88"
+      },
+      {
+        "seed": 2004,
+        "artifact_id": 12561769980,
+        "workflow_run_id": 40097586890,
+        "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+        "sha256": "dbe593041dff1a5ef8fd75c5a53594f91777ed4d4783e5335f1b2573890235d9",
+        "name": "validation-full-info_planner-seed-2004-1f209462480d33555d6a49a4be82972700d05b88"
+      },
+      {
+        "seed": 2005,
+        "artifact_id": 12561872504,
+        "workflow_run_id": 40097586890,
+        "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+        "sha256": "b0b665b49e934746a2694eb9fb49abad02f101cf515a9363762253248930da46",
+        "name": "validation-full-info_planner-seed-2005-1f209462480d33555d6a49a4be82972700d05b88"
+      }
+    ],
+    "test_splits_used_for_selection": false
+  }
+}

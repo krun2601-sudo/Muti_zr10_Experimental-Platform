@@ -76,11 +76,13 @@ policy:
       tracking_zoom_levels: [4.0, 6.0, 8.0, 10.0]
       action_ttl_s: 0.8
     baselines:
-      weighted_rh: {loss_weight: 10.0, overlap_weight: 3.0, search_weight: 1.0, motion_weight: 0.1}
+      # geometry-v2 的五种子 validation-only 选择；正式测试仍由 manifest 中的
+      # SHA-256 冻结文件注入，以下同步值用于控制中心和单次运行保持一致。
+      weighted_rh: {loss_weight: 3.0, overlap_weight: 3.0, search_weight: 1.0, motion_weight: 0.03}
       greedy: {}
-      classical_ptz: {track_weight: 4.0, search_weight: 1.0, risk_weight: 2.0, motion_weight: 0.15}
-      info_planner: {track_information_weight: 1.0, discovery_weight: 1.0, motion_weight: 0.05}
-      ssm_belief: {gamma: 0.92, monitor_weight: 4.0, search_weight: 1.0, motion_weight: 0.08}
+      classical_ptz: {track_weight: 2.0, search_weight: 1.0, risk_weight: 1.0, motion_weight: 0.15}
+      info_planner: {track_information_weight: 0.5, discovery_weight: 1.0, motion_weight: 0.1}
+      ssm_belief: {gamma: 0.98, monitor_weight: 2.0, search_weight: 2.0, motion_weight: 0.04}
       # Learning baselines receive all 63 search cells and select from the same
       # RiskAwarePrimitiveFactory action set used by the paper methods. Padding to
       # 512 candidates is explicit and never silently truncates a larger set.

@@ -1,0 +1,199 @@
+{
+  "schema_version": 1,
+  "experiment_revision": "geometry-v2-central-roi-20261024",
+  "purpose": "Validation-only baseline selection source artifacts",
+  "validation_scenarios": [
+    "S4_boundary_handoff",
+    "S8_maneuver"
+  ],
+  "validation_seeds": [
+    2001,
+    2002,
+    2003,
+    2004,
+    2005
+  ],
+  "artifacts": [
+    {
+      "artifact_id": 12562788383,
+      "name": "validation-full-classical_ptz-seed-2001-1f209462480d33555d6a49a4be82972700d05b88",
+      "workflow_run_id": 40097586890,
+      "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+      "sha256": "9c26486eecd8083668c636bc493c2815aac59030386a64106efec974d177f315",
+      "size_in_bytes": 23152381,
+      "expires_at": "2026-11-23T14:18:08Z"
+    },
+    {
+      "artifact_id": 12562581875,
+      "name": "validation-full-classical_ptz-seed-2002-1f209462480d33555d6a49a4be82972700d05b88",
+      "workflow_run_id": 40097586890,
+      "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+      "sha256": "e25051c09cff836ad482e1edd319142bc4b8465629d07f3ce4c670d45ab1d7fb",
+      "size_in_bytes": 23084074,
+      "expires_at": "2026-11-23T13:52:55Z"
+    },
+    {
+      "artifact_id": 12562067616,
+      "name": "validation-full-classical_ptz-seed-2003-1f209462480d33555d6a49a4be82972700d05b88",
+      "workflow_run_id": 40097586890,
+      "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+      "sha256": "9787d01bade8f90c3c5cddcf110dd78175f058ccc754d374e40225aa3314ce75",
+      "size_in_bytes": 23107679,
+      "expires_at": "2026-11-23T13:52:04Z"
+    },
+    {
+      "artifact_id": 12562022945,
+      "name": "validation-full-classical_ptz-seed-2005-1f209462480d33555d6a49a4be82972700d05b88",
+      "workflow_run_id": 40097586890,
+      "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+      "sha256": "bdca5a1574c09623d33cf83b4c5f783e591c3838e1f2c87909eddf289848db6a",
+      "size_in_bytes": 23090280,
+      "expires_at": "2026-11-23T13:42:06Z"
+    },
+    {
+      "artifact_id": 12561718748,
+      "name": "validation-full-info_planner-seed-2001-1f209462480d33555d6a49a4be82972700d05b88",
+      "workflow_run_id": 40097586890,
+      "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+      "sha256": "01b7f7d6038b3a39b662cb3e5e7185f3a4e6bd5f6c23e03197f12eb593e9cd4c",
+      "size_in_bytes": 18792212,
+      "expires_at": "2026-11-23T13:41:12Z"
+    },
+    {
+      "artifact_id": 12562655065,
+      "name": "validation-full-info_planner-seed-2002-1f209462480d33555d6a49a4be82972700d05b88",
+      "workflow_run_id": 40097586890,
+      "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+      "sha256": "dcb8f51e14b98752084b6da838e9914615b775b19b02381afb112902ead11e8e",
+      "size_in_bytes": 18748139,
+      "expires_at": "2026-11-23T13:41:36Z"
+    },
+    {
+      "artifact_id": 12562975520,
+      "name": "validation-full-info_planner-seed-2003-1f209462480d33555d6a49a4be82972700d05b88",
+      "workflow_run_id": 40097586890,
+      "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+      "sha256": "3a050cf2f3061e1b07ffb2ad0d43d93f7dd31110f624a909382db287a7934627",
+      "size_in_bytes": 18805113,
+      "expires_at": "2026-11-23T13:59:12Z"
+    },
+    {
+      "artifact_id": 12561769980,
+      "name": "validation-full-info_planner-seed-2004-1f209462480d33555d6a49a4be82972700d05b88",
+      "workflow_run_id": 40097586890,
+      "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+      "sha256": "dbe593041dff1a5ef8fd75c5a53594f91777ed4d4783e5335f1b2573890235d9",
+      "size_in_bytes": 18823584,
+      "expires_at": "2026-11-23T13:50:55Z"
+    },
+    {
+      "artifact_id": 12561872504,
+      "name": "validation-full-info_planner-seed-2005-1f209462480d33555d6a49a4be82972700d05b88",
+      "workflow_run_id": 40097586890,
+      "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+      "sha256": "b0b665b49e934746a2694eb9fb49abad02f101cf515a9363762253248930da46",
+      "size_in_bytes": 18669938,
+      "expires_at": "2026-11-23T13:32:56Z"
+    },
+    {
+      "artifact_id": 12561928449,
+      "name": "validation-full-ssm_belief-seed-2001-1f209462480d33555d6a49a4be82972700d05b88",
+      "workflow_run_id": 40097586890,
+      "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+      "sha256": "f2075d1eda87c345e5cdc2c2b78dc483c5f23beabadd33473424368580e5d33b",
+      "size_in_bytes": 21818453,
+      "expires_at": "2026-11-23T13:44:52Z"
+    },
+    {
+      "artifact_id": 12562688227,
+      "name": "validation-full-ssm_belief-seed-2002-1f209462480d33555d6a49a4be82972700d05b88",
+      "workflow_run_id": 40097586890,
+      "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+      "sha256": "7ff2b4f159686151813378758ac64ccc2afa8fb3f38fa82f0afd40b428ef0491",
+      "size_in_bytes": 21889325,
+      "expires_at": "2026-11-23T14:09:23Z"
+    },
+    {
+      "artifact_id": 12561783509,
+      "name": "validation-full-ssm_belief-seed-2003-1f209462480d33555d6a49a4be82972700d05b88",
+      "workflow_run_id": 40097586890,
+      "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+      "sha256": "c3a0e789bc1128c4a731158e8aa38d1849be4b47c48ac17983b8b288ef6469bc",
+      "size_in_bytes": 21857194,
+      "expires_at": "2026-11-23T13:39:13Z"
+    },
+    {
+      "artifact_id": 12562216773,
+      "name": "validation-full-ssm_belief-seed-2004-1f209462480d33555d6a49a4be82972700d05b88",
+      "workflow_run_id": 40097586890,
+      "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+      "sha256": "ddb0bd7f438d6619c591703d6a43248b57dee5b0272de7624b337941f9af3f87",
+      "size_in_bytes": 21768674,
+      "expires_at": "2026-11-23T13:38:28Z"
+    },
+    {
+      "artifact_id": 12561973558,
+      "name": "validation-full-ssm_belief-seed-2005-1f209462480d33555d6a49a4be82972700d05b88",
+      "workflow_run_id": 40097586890,
+      "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+      "sha256": "59af11bc71d07baa5f8969c67a4174f07618dc5e146f97f6192d71fecdd26125",
+      "size_in_bytes": 21617358,
+      "expires_at": "2026-11-23T13:45:03Z"
+    },
+    {
+      "artifact_id": 12562266813,
+      "name": "validation-full-weighted_rh-seed-2001-1f209462480d33555d6a49a4be82972700d05b88",
+      "workflow_run_id": 40097586890,
+      "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+      "sha256": "29f02c7ce181e34b204ff8441587c27a2b78e17380834be00d1eb857b23e8f3e",
+      "size_in_bytes": 21643368,
+      "expires_at": "2026-11-23T13:40:58Z"
+    },
+    {
+      "artifact_id": 12562833145,
+      "name": "validation-full-weighted_rh-seed-2002-1f209462480d33555d6a49a4be82972700d05b88",
+      "workflow_run_id": 40097586890,
+      "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+      "sha256": "9b23f26ab831d396b8c0b1159629979c2f7d9f7416f90874effad83196864fa1",
+      "size_in_bytes": 21920543,
+      "expires_at": "2026-11-23T14:16:03Z"
+    },
+    {
+      "artifact_id": 12562047626,
+      "name": "validation-full-weighted_rh-seed-2003-1f209462480d33555d6a49a4be82972700d05b88",
+      "workflow_run_id": 40097586890,
+      "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+      "sha256": "d17d0e9d8df2568563ed0f42f3534254fafc0320fcc5017ea54545849cd17896",
+      "size_in_bytes": 21966630,
+      "expires_at": "2026-11-23T13:40:18Z"
+    },
+    {
+      "artifact_id": 12562410681,
+      "name": "validation-full-weighted_rh-seed-2004-1f209462480d33555d6a49a4be82972700d05b88",
+      "workflow_run_id": 40097586890,
+      "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+      "sha256": "a224bb542b1dc5cb71e85f17d856c261acf19dbde22a89ebccf64919f3d7f487",
+      "size_in_bytes": 21915675,
+      "expires_at": "2026-11-23T13:41:35Z"
+    },
+    {
+      "artifact_id": 12562183182,
+      "name": "validation-full-weighted_rh-seed-2005-1f209462480d33555d6a49a4be82972700d05b88",
+      "workflow_run_id": 40097586890,
+      "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+      "sha256": "7b698c51e1ec68a450bf615931239947d0222506425f7a5be661e0ae1b661043",
+      "size_in_bytes": 21949331,
+      "expires_at": "2026-11-23T13:50:17Z"
+    },
+    {
+      "artifact_id": 12565900648,
+      "name": "validation-retry-classical_ptz-seed-2004-9a447cab9764eb4f2cf08aae91dc1ba4373c7ba2",
+      "workflow_run_id": 40106592387,
+      "head_sha": "9a447cab9764eb4f2cf08aae91dc1ba4373c7ba2",
+      "sha256": "e91e6d56ddf00bd8ed66877e41d2927b44906fa174b739638a68ea394ba38f56",
+      "size_in_bytes": 23092547,
+      "expires_at": "2026-11-23T15:44:15Z"
+    }
+  ],
+  "heldout_data_used": false
+}

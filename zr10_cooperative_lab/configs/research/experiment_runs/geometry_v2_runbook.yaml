@@ -1,18 +1,21 @@
 experiment_revision: geometry-v2-central-roi-20261024
-configuration_commit: 5622315b5b8e1c80db307d4984e2ce505a469411
+configuration_commit: 2fdde56dfa2c0348310dd80b2444391c588be49c
 protocol_order:
   - phase: configuration_and_tests
     status: passed
     workflow_run_id: 40097287389
   - phase: validation_baseline_tuning
-    status: requested
+    status: passed
+    workflow_run_ids: [40097586890, 40106592387]
     split: validation_only
     scenarios: [S4-boundary-handoff, S8-maneuver]
     seeds: [2001, 2002, 2003, 2004, 2005]
     methods: [weighted_rh, classical_ptz, info_planner, ssm_belief]
   - phase: freeze_validation_selections
-    status: pending
+    status: completed
+    directory: configs/research/frozen_baselines_geometry_v2
+    selected_methods: [weighted_rh, classical_ptz, info_planner, ssm_belief]
   - phase: heldout_main_and_ood
-    status: locked
+    status: unlocked_not_started
   - phase: ablation_sensitivity_scalability
     status: pending

@@ -12,14 +12,24 @@ experiment_revision:
   max_effective_range_m: 100
   core_algorithms_changed: false
   prior_results_valid_for_this_revision: false
+  configuration_commit: 2fdde56dfa2c0348310dd80b2444391c588be49c
 
 # geometry-v2 changes the geometry and task distribution, so all old validation
-# selections and held-out results are invalid for this revision. Keep the test
-# gate locked until new validation-only selections are committed with SHA-256 IDs.
+# selections and held-out results are invalid for this revision. The gate below
+# was unlocked only after the new validation-only files were committed and hashed.
 frozen_inputs:
-  paper_test_unlocked: false
-  baseline_selection_dir: null
-  baseline_selection_sha256: {}
+  paper_test_unlocked: true
+  baseline_selection_dir: frozen_baselines_geometry_v2
+  baseline_selection_sha256:
+    weighted_rh: 9b0042d18175e33df4fc302b4cdf6532a1af5d16dbbf9059c0691df576c1ba77
+    classical_ptz: dd89ae7eb9ac3c812acd2b1ecc5fe051ddc95f01b7400eea804369920a1f2063
+    info_planner: 9ecedc538377747b480e357823915fbd275387f0df94bcb1fcaa47e53d7f6c63
+    ssm_belief: f96702ca960d7c76bf3299ca057e26c4f5d8687c48fb5ab0dbf2c4b616dafb49
+  validation_workflow_run_ids: [40097586890, 40106592387]
+  validation_data_commits:
+    - 1f209462480d33555d6a49a4be82972700d05b88
+    - 9a447cab9764eb4f2cf08aae91dc1ba4373c7ba2
+  test_splits_used_for_selection: false
 
 # Splits were frozen before full Monte Carlo results were generated.
 splits:

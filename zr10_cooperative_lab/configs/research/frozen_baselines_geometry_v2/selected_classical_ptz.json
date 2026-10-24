@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "experiment_revision": "geometry-v2-central-roi-20261024",
+  "method": "classical_ptz",
+  "selection_rule": "lexicographic validation means over S4/S8 and seeds 2001-2005: missed-target rate, censored detection-delay P95, post-discovery total loss, maximum loss gap, revisit-age P95",
+  "selection_metrics": [
+    "research_missed_target_rate",
+    "research_detection_delay_censored_p95_s",
+    "research_total_loss_s",
+    "research_max_loss_gap_s",
+    "research_revisit_age_p95_s"
+  ],
+  "validation_configs": [
+    "scenarios/S4_boundary_handoff.yaml",
+    "scenarios/S8_maneuver.yaml"
+  ],
+  "validation_seeds": [
+    2001,
+    2002,
+    2003,
+    2004,
+    2005
+  ],
+  "evaluated_parameter_count": 24,
+  "runs_per_parameter_tuple": 10,
+  "selected_params": {
+    "motion_weight": 0.15,
+    "risk_weight": 1,
+    "search_weight": 1,
+    "track_weight": 2
+  },
+  "selected_summary": {
+    "param_motion_weight": 0.15,
+    "param_risk_weight": 1,
+    "param_search_weight": 1,
+    "param_track_weight": 2,
+    "runs": 10,
+    "research_missed_target_rate": 0,
+    "research_detection_delay_censored_p95_s": 1.7890000000000135,
+    "research_total_loss_s": 6.799999999999999,
+    "research_max_loss_gap_s": 2.25,
+    "research_revisit_age_p95_s": 12.874999999999375
+  },
+  "source_files": [
+    "validation-full-classical_ptz-seed-2001-1f209462480d33555d6a49a4be82972700d05b88/tuning_runs.csv",
+    "validation-full-classical_ptz-seed-2002-1f209462480d33555d6a49a4be82972700d05b88/tuning_runs.csv",
+    "validation-full-classical_ptz-seed-2003-1f209462480d33555d6a49a4be82972700d05b88/tuning_runs.csv",
+    "validation-retry-classical_ptz-seed-2004-9a447cab9764eb4f2cf08aae91dc1ba4373c7ba2/tuning_runs.csv",
+    "validation-full-classical_ptz-seed-2005-1f209462480d33555d6a49a4be82972700d05b88/tuning_runs.csv"
+  ],
+  "provenance": {
+    "branch": "research/ecp-rh-experiments",
+    "geometry_configuration_commit": "5622315b5b8e1c80db307d4984e2ce505a469411",
+    "validation_workflow_run_ids": [
+      40097586890,
+      40106592387
+    ],
+    "data_generation_shas": [
+      "1f209462480d33555d6a49a4be82972700d05b88",
+      "9a447cab9764eb4f2cf08aae91dc1ba4373c7ba2"
+    ],
+    "parameter_sample_seed": 20261022,
+    "artifacts": [
+      {
+        "seed": 2001,
+        "artifact_id": 12562788383,
+        "workflow_run_id": 40097586890,
+        "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+        "sha256": "9c26486eecd8083668c636bc493c2815aac59030386a64106efec974d177f315",
+        "name": "validation-full-classical_ptz-seed-2001-1f209462480d33555d6a49a4be82972700d05b88"
+      },
+      {
+        "seed": 2002,
+        "artifact_id": 12562581875,
+        "workflow_run_id": 40097586890,
+        "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+        "sha256": "e25051c09cff836ad482e1edd319142bc4b8465629d07f3ce4c670d45ab1d7fb",
+        "name": "validation-full-classical_ptz-seed-2002-1f209462480d33555d6a49a4be82972700d05b88"
+      },
+      {
+        "seed": 2003,
+        "artifact_id": 12562067616,
+        "workflow_run_id": 40097586890,
+        "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+        "sha256": "9787d01bade8f90c3c5cddcf110dd78175f058ccc754d374e40225aa3314ce75",
+        "name": "validation-full-classical_ptz-seed-2003-1f209462480d33555d6a49a4be82972700d05b88"
+      },
+      {
+        "seed": 2004,
+        "artifact_id": 12565900648,
+        "workflow_run_id": 40106592387,
+        "head_sha": "9a447cab9764eb4f2cf08aae91dc1ba4373c7ba2",
+        "sha256": "e91e6d56ddf00bd8ed66877e41d2927b44906fa174b739638a68ea394ba38f56",
+        "name": "validation-retry-classical_ptz-seed-2004-9a447cab9764eb4f2cf08aae91dc1ba4373c7ba2"
+      },
+      {
+        "seed": 2005,
+        "artifact_id": 12562022945,
+        "workflow_run_id": 40097586890,
+        "head_sha": "1f209462480d33555d6a49a4be82972700d05b88",
+        "sha256": "bdca5a1574c09623d33cf83b4c5f783e591c3838e1f2c87909eddf289848db6a",
+        "name": "validation-full-classical_ptz-seed-2005-1f209462480d33555d6a49a4be82972700d05b88"
+      }
+    ],
+    "test_splits_used_for_selection": false
+  }
+}
