@@ -131,7 +131,7 @@ jobs:
       matrix:
         method: [weighted_rh, classical_ptz, info_planner, ssm_belief]
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -182,7 +182,7 @@ jobs:
         method: [weighted_rh, classical_ptz, info_planner, ssm_belief]
         seed: [2001, 2002, 2003, 2004, 2005]
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -234,6 +234,53 @@ jobs:
         with:
           name: validation-full-${{ matrix.method }}-seed-${{ matrix.seed }}-${{ github.sha }}
           path: zr10_cooperative_lab/runs/validation_full/${{ matrix.method }}/seed_${{ matrix.seed }}
+          retention-days: 30
+
+  validation-full-retry-classical-2004:
+    if: ${{ contains(github.event.head_commit.message, '[validation-retry-classical-2004]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: zr10_cooperative_lab/pyproject.toml
+      - name: Install simulation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy scipy PyYAML opencv-python-headless matplotlib gymnasium
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - name: Re-run only the cancelled validation shard
+        working-directory: zr10_cooperative_lab
+        run: |
+          python - <<'PY'
+          import yaml
+          from pathlib import Path
+          from zr10lab.research.baseline_tuning import tune_baseline
+
+          manifest = Path('configs/research/paper_experiment_manifest.yaml').resolve()
+          data = yaml.safe_load(manifest.read_text(encoding='utf-8-sig'))
+          method = 'classical_ptz'
+          seed = 2004
+          spec = data['baseline_tuning'][method]
+          root = manifest.parent
+          configs = [(root / p).resolve() for p in data['splits']['validation_only']['scenarios']]
+          assert seed in {int(x) for x in data['splits']['validation_only']['seeds']}
+          out = Path('runs/validation_full') / method / f'seed_{seed}'
+          selected = tune_baseline(
+              method, configs, [seed], spec['grid'], out,
+              max_combinations=spec.get('max_combinations', 24),
+              sample_seed=spec.get('parameter_sample_seed', 20261022),
+          )
+          print('RETRY_SHARD_SELECTED=', selected)
+          PY
+      - name: Upload replacement validation shard
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-retry-classical_ptz-seed-2004-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/validation_full/classical_ptz/seed_2004
           retention-days: 30
 
   paper-test-main-method:
