@@ -1,0 +1,527 @@
+name: paper-remaining-experiments
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["research/ecp-rh-experiments"]
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  main-reaggregate:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[paper-experiments-rest]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install analysis dependencies
+        run: |
+          python -m pip install numpy scipy pandas PyYAML matplotlib
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - name: Download immutable first held-out main-test shards
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 39972864865
+          pattern: paper-test-main-*-9c422f949af04bf5a507188d98f60f49b70d3d4c
+          path: zr10_cooperative_lab/runs/main_original_shards
+          merge-multiple: false
+      - name: Rebuild frozen main-test aggregate with transparent logging correction
+        working-directory: zr10_cooperative_lab
+        run: |
+          python - <<'PY'
+          import csv, json, math
+          from pathlib import Path
+          import numpy as np
+          import pandas as pd
+
+          inputs=Path('runs/main_original_shards')
+          methods=['fixed_scan','greedy','weighted_rh','classical_ptz','info_planner','ssm_belief','ecprh']
+          tables=list(inputs.rglob('run_metrics.csv'))
+          statuses=list(inputs.rglob('batch_status.json'))
+          assert len(tables)==7, [str(p) for p in tables]
+          assert len(statuses)==7, [str(p) for p in statuses]
+          for p in statuses:
+              s=json.loads(p.read_text())
+              assert s['attempted']==80 and s['completed']==80 and s['failed']==0, (p,s)
+          frames=[pd.read_csv(p,encoding='utf-8-sig') for p in tables]
+          raw=pd.concat(frames,ignore_index=True,sort=False)
+          assert len(raw)==560
+          keys=raw[['scenario','seed','method']].astype(str)
+          assert not keys.duplicated().any()
+          counts=raw.groupby('method').size().to_dict()
+          assert counts=={m:80 for m in methods}, counts
+          out=Path('runs/paper_test_main_final'); out.mkdir(parents=True,exist_ok=True)
+          raw.to_csv(out/'run_metrics_raw_first_heldout.csv',index=False,encoding='utf-8-sig')
+
+          # The first held-out run preceded commit 6e2865a, which fixed only the
+          # derived replan-frequency denominator when the first replan occurs at t=0.
+          # Preserve raw data, but do not publish the known-invalid derived column.
+          df=raw.copy()
+          if 'research_replan_frequency_hz' in df.columns:
+              df['research_replan_frequency_hz']=np.nan
+          df.to_csv(out/'run_metrics.csv',index=False,encoding='utf-8-sig')
+          (out/'posthoc_corrections.json').write_text(json.dumps({
+              'source_workflow_run_id':39972864865,
+              'source_commit':'9c422f949af04bf5a507188d98f60f49b70d3d4c',
+              'algorithm_or_primary_metric_changed':False,
+              'invalidated_secondary_column':'research_replan_frequency_hz',
+              'reason':'t=0 was treated as falsy in the original derived frequency denominator',
+              'logging_fix_commit':'6e2865aee448b500939fae6f990a39db827c68de',
+              'raw_table_preserved':'run_metrics_raw_first_heldout.csv'
+          },indent=2),encoding='utf-8')
+
+          metadata={'scenario','method','seed','run_dir','status','config','error'}
+          rows=[]
+          for (scenario,method), group in df.groupby(['scenario','method'],sort=True):
+              for key in df.columns:
+                  if key in metadata: continue
+                  values=pd.to_numeric(group[key],errors='coerce').to_numpy(dtype=float)
+                  values=values[np.isfinite(values)]
+                  if not len(values): continue
+                  mean=float(values.mean()); std=float(values.std(ddof=1)) if len(values)>1 else 0.0
+                  ci=1.96*std/math.sqrt(len(values)) if len(values)>1 else 0.0
+                  rows.append({'scenario':scenario,'method':method,'metric':key,'n':len(values),
+                               'mean':mean,'std':std,'ci95_low':mean-ci,'ci95_high':mean+ci,
+                               'min':float(values.min()),'max':float(values.max())})
+          fields=sorted({k for r in rows for k in r})
+          with (out/'summary_long.csv').open('w',encoding='utf-8-sig',newline='') as h:
+              w=csv.DictWriter(h,fieldnames=fields); w.writeheader(); w.writerows(rows)
+          (out/'combined_status.json').write_text(json.dumps({
+              'expected_runs':560,'actual_runs':len(df),'runs_per_method':counts,
+              'all_source_shards_completed':True,'all_source_shards_failed_runs':0
+          },indent=2),encoding='utf-8')
+          PY
+          python -m zr10lab.research.statistics \
+            runs/paper_test_main_final/run_metrics.csv \
+            --reference ecprh --bootstrap 10000 \
+            --output runs/paper_test_main_final/paired_comparisons.csv
+          python -m zr10lab.research.result_audit \
+            runs/paper_test_main_final/run_metrics.csv \
+            runs/paper_test_main_final/paired_comparisons.csv \
+            --manifest configs/research/paper_experiment_manifest.yaml \
+            --output runs/paper_test_main_final/integrity_audit.json
+          python -m zr10lab.research.plots batch \
+            runs/paper_test_main_final --output runs/paper_test_main_final/figures
+      - name: Upload final main-test aggregate
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-test-main-final-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/paper_test_main_final
+          retention-days: 90
+          compression-level: 6
+
+  ood-method:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[paper-experiments-rest]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        method: [fixed_scan, greedy, weighted_rh, classical_ptz, info_planner, ssm_belief, ecprh]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install simulation dependencies
+        run: |
+          python -m pip install numpy scipy pandas PyYAML matplotlib
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - name: Run frozen OOD shard
+        working-directory: zr10_cooperative_lab
+        env:
+          METHOD: ${{ matrix.method }}
+        run: |
+          python -m zr10lab.research.protocol \
+            --manifest configs/research/paper_experiment_manifest.yaml \
+            --split test_ood --methods "$METHOD" \
+            --output "runs/paper_test_ood/$METHOD" \
+            --baseline-selections configs/research/frozen_baselines \
+            --no-paired
+      - name: Audit OOD shard completeness
+        working-directory: zr10_cooperative_lab
+        env:
+          METHOD: ${{ matrix.method }}
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          root=Path('runs/paper_test_ood')/os.environ['METHOD']/'test_ood'
+          status=json.loads((root/'batch_status.json').read_text())
+          assert status['attempted']==40 and status['completed']==40 and status['failed']==0, status
+          print(json.dumps(status,indent=2))
+          PY
+      - name: Upload OOD method shard
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-test-ood-${{ matrix.method }}-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/paper_test_ood/${{ matrix.method }}/test_ood
+          retention-days: 90
+          compression-level: 6
+
+  ood-aggregate:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[paper-experiments-rest]') }}
+    needs: ood-method
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install analysis dependencies
+        run: |
+          python -m pip install numpy scipy pandas PyYAML matplotlib
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: paper-test-ood-*-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/ood_inputs
+          merge-multiple: false
+      - name: Merge exactly 280 OOD runs
+        working-directory: zr10_cooperative_lab
+        run: |
+          python - <<'PY'
+          import csv,json,math
+          from pathlib import Path
+          import numpy as np, pandas as pd
+          inputs=Path('runs/ood_inputs'); out=Path('runs/paper_test_ood_final'); out.mkdir(parents=True,exist_ok=True)
+          methods=['fixed_scan','greedy','weighted_rh','classical_ptz','info_planner','ssm_belief','ecprh']
+          tables=list(inputs.rglob('run_metrics.csv')); statuses=list(inputs.rglob('batch_status.json'))
+          assert len(tables)==7 and len(statuses)==7
+          for p in statuses:
+              s=json.loads(p.read_text()); assert s['attempted']==40 and s['completed']==40 and s['failed']==0, (p,s)
+          df=pd.concat([pd.read_csv(p,encoding='utf-8-sig') for p in tables],ignore_index=True,sort=False)
+          assert len(df)==280
+          assert not df[['scenario','seed','method']].astype(str).duplicated().any()
+          counts=df.groupby('method').size().to_dict(); assert counts=={m:40 for m in methods}, counts
+          df.to_csv(out/'run_metrics.csv',index=False,encoding='utf-8-sig')
+          metadata={'scenario','method','seed','run_dir','status','config','error'}; rows=[]
+          for (scenario,method),g in df.groupby(['scenario','method'],sort=True):
+              for key in df.columns:
+                  if key in metadata: continue
+                  v=pd.to_numeric(g[key],errors='coerce').to_numpy(float); v=v[np.isfinite(v)]
+                  if not len(v): continue
+                  mean=float(v.mean()); std=float(v.std(ddof=1)) if len(v)>1 else 0.0; ci=1.96*std/math.sqrt(len(v)) if len(v)>1 else 0.0
+                  rows.append({'scenario':scenario,'method':method,'metric':key,'n':len(v),'mean':mean,'std':std,'ci95_low':mean-ci,'ci95_high':mean+ci,'min':float(v.min()),'max':float(v.max())})
+          fields=sorted({k for r in rows for k in r})
+          with (out/'summary_long.csv').open('w',encoding='utf-8-sig',newline='') as h:
+              w=csv.DictWriter(h,fieldnames=fields); w.writeheader(); w.writerows(rows)
+          (out/'combined_status.json').write_text(json.dumps({'expected_runs':280,'actual_runs':len(df),'runs_per_method':counts},indent=2))
+          PY
+          python -m zr10lab.research.statistics runs/paper_test_ood_final/run_metrics.csv \
+            --reference ecprh --bootstrap 10000 --output runs/paper_test_ood_final/paired_comparisons.csv
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+          p=Path('runs/paper_test_ood_final/paired_comparisons.csv')
+          rows=list(csv.DictReader(p.open(encoding='utf-8-sig',newline='')))
+          primary={'research_missed_target_rate','research_detection_delay_censored_p95_s','research_total_loss_s','research_max_loss_gap_s','research_revisit_age_p95_s'}
+          for r in rows:
+              if r['metric'] in primary:
+                  expected=40 if r['scope']=='overall' else 20
+                  assert int(r['n_pairs'])==expected, r
+          print('OOD paired primary-metric audit OK')
+          PY
+          python -m zr10lab.research.plots batch runs/paper_test_ood_final --output runs/paper_test_ood_final/figures
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paper-test-ood-combined-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/paper_test_ood_final
+          retention-days: 90
+          compression-level: 6
+
+  ablation-shard:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[paper-experiments-rest]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {id: S2, scenario: S2_staggered, seeds: "1001 1002 1003 1004 1005 1006 1007 1008 1009 1010 1011 1012 1013 1014 1015 1016 1017 1018 1019 1020", ablations: "fixed_zoom no_event_replan", expected: 60}
+          - {id: S4, scenario: S4_boundary_handoff, seeds: "2001 2002 2003 2004 2005", ablations: "no_overlap no_execution_model no_event_replan short_horizon", expected: 25}
+          - {id: S5, scenario: S5_cluster_split, seeds: "1001 1002 1003 1004 1005 1006 1007 1008 1009 1010 1011 1012 1013 1014 1015 1016 1017 1018 1019 1020", ablations: "fixed_zoom no_shared_fov", expected: 60}
+          - {id: S6, scenario: S6_contention, seeds: "1001 1002 1003 1004 1005 1006 1007 1008 1009 1010 1011 1012 1013 1014 1015 1016 1017 1018 1019 1020", ablations: "fixed_zoom no_shared_fov short_horizon", expected: 80}
+          - {id: S8, scenario: S8_maneuver, seeds: "2001 2002 2003 2004 2005", ablations: "no_uncertainty", expected: 10}
+          - {id: S11, scenario: S11_heldout_handoff_contention, seeds: "3001 3002 3003 3004 3005 3006 3007 3008 3009 3010 3011 3012 3013 3014 3015 3016 3017 3018 3019 3020", ablations: "no_overlap no_event_replan", expected: 60}
+          - {id: S9a, scenario: S9a_ood_fast, seeds: "4001 4002 4003 4004 4005 4006 4007 4008 4009 4010 4011 4012 4013 4014 4015 4016 4017 4018 4019 4020", ablations: "no_execution_model no_uncertainty", expected: 60}
+          - {id: S9b, scenario: S9b_ood_delay_noise, seeds: "4001 4002 4003 4004 4005 4006 4007 4008 4009 4010 4011 4012 4013 4014 4015 4016 4017 4018 4019 4020", ablations: "no_execution_model no_uncertainty", expected: 60}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install simulation dependencies
+        run: |
+          python -m pip install numpy scipy pandas PyYAML matplotlib
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - name: Run mapped single-factor ablations
+        working-directory: zr10_cooperative_lab
+        env:
+          STUDY_ID: ${{ matrix.id }}
+          SCENARIO: ${{ matrix.scenario }}
+          SEEDS: ${{ matrix.seeds }}
+          ABLATIONS: ${{ matrix.ablations }}
+          EXPECTED: ${{ matrix.expected }}
+        run: |
+          args=()
+          for a in $ABLATIONS; do args+=("configs/research/ablations/${a}.yaml"); done
+          python -m zr10lab.research.studies ablation \
+            --scenarios "configs/research/scenarios/${SCENARIO}.yaml" \
+            --ablations "${args[@]}" --seeds $SEEDS \
+            --output "runs/paper_ablations/${STUDY_ID}"
+          python - <<'PY'
+          import csv,os
+          from pathlib import Path
+          root=Path('runs/paper_ablations')/os.environ['STUDY_ID']
+          idx=list(csv.DictReader((root/'index.csv').open(encoding='utf-8-sig',newline='')))
+          metrics=list(csv.DictReader((root/'run_metrics.csv').open(encoding='utf-8-sig',newline='')))
+          expected=int(os.environ['EXPECTED'])
+          assert len(idx)==expected and len(metrics)==expected, (len(idx),len(metrics),expected)
+          failed=[r for r in idx if r['status']!='completed']; assert not failed, failed[:3]
+          print(f'ablation {os.environ["STUDY_ID"]}: {expected}/{expected} complete')
+          PY
+          python -m zr10lab.research.statistics "runs/paper_ablations/${STUDY_ID}/run_metrics.csv" \
+            --reference 'ecprh[full]' --bootstrap 10000 \
+            --output "runs/paper_ablations/${STUDY_ID}/paired_comparisons.csv"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paper-ablation-${{ matrix.id }}-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/paper_ablations/${{ matrix.id }}
+          retention-days: 90
+          compression-level: 6
+
+  ablation-aggregate:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[paper-experiments-rest]') }}
+    needs: ablation-shard
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: python -m pip install pandas numpy
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: paper-ablation-*-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/ablation_inputs
+          merge-multiple: false
+      - name: Build complete ablation table
+        working-directory: zr10_cooperative_lab
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          tables=list(Path('runs/ablation_inputs').rglob('run_metrics.csv'))
+          assert len(tables)==8, [str(p) for p in tables]
+          df=pd.concat([pd.read_csv(p,encoding='utf-8-sig') for p in tables],ignore_index=True,sort=False)
+          assert len(df)==415, len(df)
+          out=Path('runs/paper_ablations_final'); out.mkdir(parents=True,exist_ok=True)
+          df.to_csv(out/'run_metrics.csv',index=False,encoding='utf-8-sig')
+          summaries=list(Path('runs/ablation_inputs').rglob('summary_long.csv'))
+          if summaries:
+              pd.concat([pd.read_csv(p,encoding='utf-8-sig') for p in summaries],ignore_index=True,sort=False).to_csv(out/'summary_long.csv',index=False,encoding='utf-8-sig')
+          comps=list(Path('runs/ablation_inputs').rglob('paired_comparisons.csv'))
+          if comps:
+              pd.concat([pd.read_csv(p,encoding='utf-8-sig') for p in comps],ignore_index=True,sort=False).to_csv(out/'paired_comparisons.csv',index=False,encoding='utf-8-sig')
+          (out/'completion.json').write_text(json.dumps({'expected_runs':415,'actual_runs':len(df),'scenario_shards':8},indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paper-ablations-combined-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/paper_ablations_final
+          retention-days: 90
+
+  sensitivity-shard:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[paper-experiments-rest]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {id: visibility_risk, path: policy.research.planning.visibility_risk, values: "0.01 0.025 0.05 0.10 0.20", expected: 50}
+          - {id: horizon_s, path: policy.research.planning.horizon_s, values: "1.0 2.0 3.0 4.0 5.0", expected: 50}
+          - {id: replan_period_s, path: policy.research.planning.replan_period_s, values: "0.25 0.5 1.0", expected: 30}
+          - {id: settle_s, path: policy.research.execution.settle_s, values: "0.10 0.25 0.50", expected: 30}
+          - {id: detection_probability, path: policy.research.perception.detection_probability, values: "0.80 0.90 0.96 1.00", expected: 40}
+          - {id: position_noise_std_m, path: policy.research.perception.position_noise_std_m, values: "0.25 0.5 1.0 2.0 4.0", expected: 50}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - name: Install simulation dependencies
+        run: |
+          python -m pip install numpy scipy pandas PyYAML matplotlib
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - name: Run fixed validation-panel sensitivity sweep
+        working-directory: zr10_cooperative_lab
+        env:
+          STUDY_ID: ${{ matrix.id }}
+          STUDY_PATH: ${{ matrix.path }}
+          VALUES: ${{ matrix.values }}
+          EXPECTED: ${{ matrix.expected }}
+        run: |
+          read -ra vals <<< "$VALUES"
+          python -m zr10lab.research.studies sensitivity \
+            --scenarios configs/research/scenarios/S4_boundary_handoff.yaml configs/research/scenarios/S8_maneuver.yaml \
+            --path "$STUDY_PATH" --values "${vals[@]}" \
+            --seeds 2001 2002 2003 2004 2005 \
+            --output "runs/paper_sensitivity/${STUDY_ID}"
+          python - <<'PY'
+          import csv,os
+          from pathlib import Path
+          root=Path('runs/paper_sensitivity')/os.environ['STUDY_ID']
+          idx=list(csv.DictReader((root/'index.csv').open(encoding='utf-8-sig',newline='')))
+          metrics=list(csv.DictReader((root/'run_metrics.csv').open(encoding='utf-8-sig',newline='')))
+          expected=int(os.environ['EXPECTED'])
+          assert len(idx)==expected and len(metrics)==expected,(len(idx),len(metrics),expected)
+          failed=[r for r in idx if r['status']!='completed']; assert not failed,failed[:3]
+          print(f'sensitivity {os.environ["STUDY_ID"]}: {expected}/{expected} complete')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paper-sensitivity-${{ matrix.id }}-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/paper_sensitivity/${{ matrix.id }}
+          retention-days: 90
+          compression-level: 6
+
+  sensitivity-aggregate:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[paper-experiments-rest]') }}
+    needs: sensitivity-shard
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: python -m pip install pandas
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: paper-sensitivity-*-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/sensitivity_inputs
+          merge-multiple: false
+      - name: Build complete sensitivity table
+        working-directory: zr10_cooperative_lab
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          tables=list(Path('runs/sensitivity_inputs').rglob('run_metrics.csv'))
+          assert len(tables)==6,[str(p) for p in tables]
+          df=pd.concat([pd.read_csv(p,encoding='utf-8-sig') for p in tables],ignore_index=True,sort=False)
+          assert len(df)==250,len(df)
+          out=Path('runs/paper_sensitivity_final');out.mkdir(parents=True,exist_ok=True)
+          df.to_csv(out/'run_metrics.csv',index=False,encoding='utf-8-sig')
+          summaries=list(Path('runs/sensitivity_inputs').rglob('summary_long.csv'))
+          if summaries:
+              pd.concat([pd.read_csv(p,encoding='utf-8-sig') for p in summaries],ignore_index=True,sort=False).to_csv(out/'summary_long.csv',index=False,encoding='utf-8-sig')
+          (out/'completion.json').write_text(json.dumps({'expected_runs':250,'actual_runs':len(df),'sweeps':6,'panel':['S4_boundary_handoff','S8_maneuver'],'seeds':[2001,2002,2003,2004,2005]},indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paper-sensitivity-combined-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/paper_sensitivity_final
+          retention-days: 90
+
+  scalability:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[paper-experiments-rest]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - name: Install solver dependencies
+        run: |
+          python -m pip install numpy scipy PyYAML
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - name: Run frozen target/candidate scalability grid
+        working-directory: zr10_cooperative_lab
+        run: |
+          mkdir -p runs/paper_scalability
+          python -m zr10lab.research.scalability \
+            --config configs/research/search_monitor_base.yaml \
+            --targets 0 1 2 3 4 5 6 8 \
+            --search-candidates 4 8 12 \
+            --repetitions 10 \
+            --output runs/paper_scalability/scalability.csv
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+          rows=list(csv.DictReader(Path('runs/paper_scalability/scalability.csv').open(encoding='utf-8-sig',newline='')))
+          assert len(rows)==24,len(rows)
+          assert all(int(r['repetitions'])==10 for r in rows)
+          print('scalability grid: 24/24 complete')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paper-scalability-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/paper_scalability
+          retention-days: 90
+
+  completion-index:
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[paper-experiments-rest]')) }}
+    needs: [main-reaggregate, ood-aggregate, ablation-aggregate, sensitivity-aggregate, scalability]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: paper-*-combined-${{ github.sha }}
+          path: completion/combined
+          merge-multiple: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: paper-test-main-final-${{ github.sha }}
+          path: completion/main
+          merge-multiple: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: paper-scalability-${{ github.sha }}
+          path: completion/scalability
+          merge-multiple: false
+      - name: Write completion audit
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          expected={
+            'main':560,'ood':280,'ablations':415,'sensitivity':250,'scalability_cases':24
+          }
+          files=[str(p) for p in Path('completion').rglob('*') if p.is_file()]
+          required=['paper_test_main_final','paper_test_ood_final','paper_ablations_final','paper_sensitivity_final','paper_scalability']
+          text='\n'.join(files)
+          missing=[x for x in required if x not in text]
+          status='complete' if not missing else 'incomplete'
+          Path('completion/EXPERIMENT_COMPLETION.json').write_text(json.dumps({
+            'status':status,'expected':expected,'missing_artifact_markers':missing,
+            'workflow_commit':'${{ github.sha }}','files':files
+          },indent=2),encoding='utf-8')
+          if missing: raise SystemExit(f'missing completion artifacts: {missing}')
+          print('paper simulation experiment package COMPLETE')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paper-experiment-completion-${{ github.sha }}
+          path: completion
+          retention-days: 90
+          compression-level: 6
