@@ -1,0 +1,98 @@
+name: paper-main-finalize
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["research/ecp-rh-experiments"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  finalize-main:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[paper-main-finalize]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - name: Install analysis runtime
+        run: |
+          python -m pip install numpy scipy pandas PyYAML matplotlib
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - name: Download immutable first held-out shards
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 39972864865
+          pattern: paper-test-main-*-9c422f949af04bf5a507188d98f60f49b70d3d4c
+          path: zr10_cooperative_lab/runs/main_original_shards
+          merge-multiple: false
+      - name: Build exactly 560 frozen rows and transparent correction record
+        working-directory: zr10_cooperative_lab
+        run: |
+          python - <<'PY'
+          import csv,json,math
+          from pathlib import Path
+          import numpy as np,pandas as pd
+          inputs=Path('runs/main_original_shards');out=Path('runs/paper_test_main_final');out.mkdir(parents=True,exist_ok=True)
+          methods=['fixed_scan','greedy','weighted_rh','classical_ptz','info_planner','ssm_belief','ecprh']
+          tabs=list(inputs.rglob('run_metrics.csv'));sts=list(inputs.rglob('batch_status.json'))
+          assert len(tabs)==7 and len(sts)==7,(len(tabs),len(sts))
+          for p in sts:
+              s=json.loads(p.read_text());assert s['attempted']==80 and s['completed']==80 and s['failed']==0,(p,s)
+          raw=pd.concat([pd.read_csv(p,encoding='utf-8-sig') for p in tabs],ignore_index=True,sort=False)
+          assert len(raw)==560,len(raw)
+          assert not raw[['scenario','seed','method']].astype(str).duplicated().any()
+          counts=raw.groupby('method').size().to_dict();assert counts=={m:80 for m in methods},counts
+          raw.to_csv(out/'run_metrics_raw_first_heldout.csv',index=False,encoding='utf-8-sig')
+          df=raw.copy()
+          if 'research_replan_frequency_hz' in df.columns:df['research_replan_frequency_hz']=np.nan
+          df.to_csv(out/'run_metrics.csv',index=False,encoding='utf-8-sig')
+          (out/'posthoc_corrections.json').write_text(json.dumps({
+            'source_workflow_run_id':39972864865,
+            'source_commit':'9c422f949af04bf5a507188d98f60f49b70d3d4c',
+            'algorithm_or_primary_metric_changed':False,
+            'invalidated_secondary_column':'research_replan_frequency_hz',
+            'reason':'first-replan t=0 was treated as falsy only in the derived frequency denominator',
+            'logging_fix_commit':'6e2865aee448b500939fae6f990a39db827c68de',
+            'raw_table_preserved':'run_metrics_raw_first_heldout.csv'
+          },indent=2),encoding='utf-8')
+          meta={'scenario','method','seed','run_dir','status','config','error'};rows=[]
+          for (sc,m),g in df.groupby(['scenario','method'],sort=True):
+              for k in df.columns:
+                  if k in meta:continue
+                  v=pd.to_numeric(g[k],errors='coerce').to_numpy(float);v=v[np.isfinite(v)]
+                  if not len(v):continue
+                  mean=float(v.mean());std=float(v.std(ddof=1)) if len(v)>1 else 0.;ci=1.96*std/math.sqrt(len(v)) if len(v)>1 else 0.
+                  rows.append({'scenario':sc,'method':m,'metric':k,'n':len(v),'mean':mean,'std':std,'ci95_low':mean-ci,'ci95_high':mean+ci,'min':float(v.min()),'max':float(v.max())})
+          fields=sorted({k for r in rows for k in r})
+          with (out/'summary_long.csv').open('w',encoding='utf-8-sig',newline='') as h:
+              w=csv.DictWriter(h,fieldnames=fields);w.writeheader();w.writerows(rows)
+          (out/'combined_status.json').write_text(json.dumps({'expected_runs':560,'actual_runs':len(df),'runs_per_method':counts,'source_failed_runs':0},indent=2))
+          PY
+          python -m zr10lab.research.statistics runs/paper_test_main_final/run_metrics.csv --reference ecprh --bootstrap 10000 --output runs/paper_test_main_final/paired_comparisons.csv
+          python -m zr10lab.research.result_audit runs/paper_test_main_final/run_metrics.csv runs/paper_test_main_final/paired_comparisons.csv --manifest configs/research/paper_experiment_manifest.yaml --output runs/paper_test_main_final/integrity_audit.json
+          python -m zr10lab.research.plots batch runs/paper_test_main_final --output runs/paper_test_main_final/figures
+      - name: Verify finalized package
+        working-directory: zr10_cooperative_lab
+        run: |
+          python - <<'PY'
+          import json,pandas as pd
+          from pathlib import Path
+          r=Path('runs/paper_test_main_final')
+          df=pd.read_csv(r/'run_metrics.csv',encoding='utf-8-sig');assert len(df)==560
+          audit=json.loads((r/'integrity_audit.json').read_text());assert audit['status']=='ok',audit
+          assert audit['actual_total_runs']==560,audit
+          assert (r/'paired_comparisons.csv').exists() and (r/'summary_long.csv').exists()
+          print(json.dumps(audit,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paper-test-main-final-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/paper_test_main_final
+          retention-days: 90
+          compression-level: 6
