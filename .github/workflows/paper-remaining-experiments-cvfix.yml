@@ -1,0 +1,323 @@
+name: paper-remaining-experiments-cvfix
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["research/ecp-rh-experiments"]
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  ood-method:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[paper-experiments-cvfix]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        method: [fixed_scan, greedy, weighted_rh, classical_ptz, info_planner, ssm_belief, ecprh]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - name: Install complete simulation runtime
+        run: |
+          python -m pip install numpy scipy pandas PyYAML matplotlib opencv-python-headless
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - name: Run frozen OOD shard
+        working-directory: zr10_cooperative_lab
+        env: {METHOD: "${{ matrix.method }}"}
+        run: |
+          python -m zr10lab.research.protocol \
+            --manifest configs/research/paper_experiment_manifest.yaml \
+            --split test_ood --methods "$METHOD" \
+            --output "runs/paper_test_ood/$METHOD" \
+            --baseline-selections configs/research/frozen_baselines \
+            --no-paired
+      - name: Audit OOD shard
+        working-directory: zr10_cooperative_lab
+        env: {METHOD: "${{ matrix.method }}"}
+        run: |
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path('runs/paper_test_ood')/os.environ['METHOD']/'test_ood'
+          s=json.loads((root/'batch_status.json').read_text())
+          assert s['attempted']==40 and s['completed']==40 and s['failed']==0,s
+          print(json.dumps(s,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paper-cvfix-ood-${{ matrix.method }}-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/paper_test_ood/${{ matrix.method }}/test_ood
+          retention-days: 90
+          compression-level: 6
+
+  ood-aggregate:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[paper-experiments-cvfix]') }}
+    needs: ood-method
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: |
+          python -m pip install numpy scipy pandas PyYAML matplotlib
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: paper-cvfix-ood-*-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/ood_inputs
+          merge-multiple: false
+      - name: Merge and statistically audit OOD
+        working-directory: zr10_cooperative_lab
+        run: |
+          python - <<'PY'
+          import csv,json,math
+          from pathlib import Path
+          import numpy as np,pandas as pd
+          inputs=Path('runs/ood_inputs'); out=Path('runs/paper_test_ood_final');out.mkdir(parents=True,exist_ok=True)
+          methods=['fixed_scan','greedy','weighted_rh','classical_ptz','info_planner','ssm_belief','ecprh']
+          tabs=list(inputs.rglob('run_metrics.csv')); sts=list(inputs.rglob('batch_status.json'))
+          assert len(tabs)==7 and len(sts)==7,(len(tabs),len(sts))
+          for p in sts:
+              s=json.loads(p.read_text()); assert s['attempted']==40 and s['completed']==40 and s['failed']==0,(p,s)
+          df=pd.concat([pd.read_csv(p,encoding='utf-8-sig') for p in tabs],ignore_index=True,sort=False)
+          assert len(df)==280,len(df)
+          assert not df[['scenario','seed','method']].astype(str).duplicated().any()
+          counts=df.groupby('method').size().to_dict();assert counts=={m:40 for m in methods},counts
+          df.to_csv(out/'run_metrics.csv',index=False,encoding='utf-8-sig')
+          meta={'scenario','method','seed','run_dir','status','config','error'};rows=[]
+          for (sc,m),g in df.groupby(['scenario','method'],sort=True):
+              for k in df.columns:
+                  if k in meta: continue
+                  v=pd.to_numeric(g[k],errors='coerce').to_numpy(float);v=v[np.isfinite(v)]
+                  if not len(v):continue
+                  mean=float(v.mean());std=float(v.std(ddof=1)) if len(v)>1 else 0.;ci=1.96*std/math.sqrt(len(v)) if len(v)>1 else 0.
+                  rows.append({'scenario':sc,'method':m,'metric':k,'n':len(v),'mean':mean,'std':std,'ci95_low':mean-ci,'ci95_high':mean+ci,'min':float(v.min()),'max':float(v.max())})
+          fields=sorted({k for r in rows for k in r})
+          with (out/'summary_long.csv').open('w',encoding='utf-8-sig',newline='') as h:
+              w=csv.DictWriter(h,fieldnames=fields);w.writeheader();w.writerows(rows)
+          (out/'combined_status.json').write_text(json.dumps({'expected_runs':280,'actual_runs':len(df),'runs_per_method':counts},indent=2))
+          PY
+          python -m zr10lab.research.statistics runs/paper_test_ood_final/run_metrics.csv --reference ecprh --bootstrap 10000 --output runs/paper_test_ood_final/paired_comparisons.csv
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+          rows=list(csv.DictReader(Path('runs/paper_test_ood_final/paired_comparisons.csv').open(encoding='utf-8-sig',newline='')))
+          primary={'research_missed_target_rate','research_detection_delay_censored_p95_s','research_total_loss_s','research_max_loss_gap_s','research_revisit_age_p95_s'}
+          for r in rows:
+              if r['metric'] in primary:
+                  assert int(r['n_pairs'])==(40 if r['scope']=='overall' else 20),r
+          print('OOD primary paired counts OK')
+          PY
+          python -m zr10lab.research.plots batch runs/paper_test_ood_final --output runs/paper_test_ood_final/figures
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paper-cvfix-ood-combined-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/paper_test_ood_final
+          retention-days: 90
+
+  ablation-shard:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[paper-experiments-cvfix]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {id: S2, scenario: S2_staggered, seeds: "1001 1002 1003 1004 1005 1006 1007 1008 1009 1010 1011 1012 1013 1014 1015 1016 1017 1018 1019 1020", ablations: "fixed_zoom no_event_replan", expected: 60}
+          - {id: S4, scenario: S4_boundary_handoff, seeds: "2001 2002 2003 2004 2005", ablations: "no_overlap no_execution_model no_event_replan short_horizon", expected: 25}
+          - {id: S5, scenario: S5_cluster_split, seeds: "1001 1002 1003 1004 1005 1006 1007 1008 1009 1010 1011 1012 1013 1014 1015 1016 1017 1018 1019 1020", ablations: "fixed_zoom no_shared_fov", expected: 60}
+          - {id: S6, scenario: S6_contention, seeds: "1001 1002 1003 1004 1005 1006 1007 1008 1009 1010 1011 1012 1013 1014 1015 1016 1017 1018 1019 1020", ablations: "fixed_zoom no_shared_fov short_horizon", expected: 80}
+          - {id: S8, scenario: S8_maneuver, seeds: "2001 2002 2003 2004 2005", ablations: "no_uncertainty", expected: 10}
+          - {id: S11, scenario: S11_heldout_handoff_contention, seeds: "3001 3002 3003 3004 3005 3006 3007 3008 3009 3010 3011 3012 3013 3014 3015 3016 3017 3018 3019 3020", ablations: "no_overlap no_event_replan", expected: 60}
+          - {id: S9a, scenario: S9a_ood_fast, seeds: "4001 4002 4003 4004 4005 4006 4007 4008 4009 4010 4011 4012 4013 4014 4015 4016 4017 4018 4019 4020", ablations: "no_execution_model no_uncertainty", expected: 60}
+          - {id: S9b, scenario: S9b_ood_delay_noise, seeds: "4001 4002 4003 4004 4005 4006 4007 4008 4009 4010 4011 4012 4013 4014 4015 4016 4017 4018 4019 4020", ablations: "no_execution_model no_uncertainty", expected: 60}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - name: Install complete simulation runtime
+        run: |
+          python -m pip install numpy scipy pandas PyYAML matplotlib opencv-python-headless
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - name: Run mapped ablation shard
+        working-directory: zr10_cooperative_lab
+        env:
+          ID: ${{ matrix.id }}
+          SCENARIO: ${{ matrix.scenario }}
+          SEEDS: ${{ matrix.seeds }}
+          ABLATIONS: ${{ matrix.ablations }}
+          EXPECTED: ${{ matrix.expected }}
+        run: |
+          args=(); for a in $ABLATIONS; do args+=("configs/research/ablations/${a}.yaml"); done
+          python -m zr10lab.research.studies ablation --scenarios "configs/research/scenarios/${SCENARIO}.yaml" --ablations "${args[@]}" --seeds $SEEDS --output "runs/paper_ablations/${ID}"
+          python - <<'PY'
+          import csv,os
+          from pathlib import Path
+          r=Path('runs/paper_ablations')/os.environ['ID'];e=int(os.environ['EXPECTED'])
+          idx=list(csv.DictReader((r/'index.csv').open(encoding='utf-8-sig',newline='')));m=list(csv.DictReader((r/'run_metrics.csv').open(encoding='utf-8-sig',newline='')))
+          assert len(idx)==e and len(m)==e,(len(idx),len(m),e);assert all(x['status']=='completed' for x in idx)
+          print(f'{os.environ["ID"]}: {e}/{e}')
+          PY
+          python -m zr10lab.research.statistics "runs/paper_ablations/${ID}/run_metrics.csv" --reference 'ecprh[full]' --bootstrap 10000 --output "runs/paper_ablations/${ID}/paired_comparisons.csv"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paper-cvfix-ablation-${{ matrix.id }}-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/paper_ablations/${{ matrix.id }}
+          retention-days: 90
+          compression-level: 6
+
+  ablation-aggregate:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[paper-experiments-cvfix]') }}
+    needs: ablation-shard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: python -m pip install pandas
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: paper-cvfix-ablation-*-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/ablation_inputs
+          merge-multiple: false
+      - name: Merge 415 mapped ablation runs
+        working-directory: zr10_cooperative_lab
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          tabs=list(Path('runs/ablation_inputs').rglob('run_metrics.csv'));assert len(tabs)==8,tabs
+          df=pd.concat([pd.read_csv(p,encoding='utf-8-sig') for p in tabs],ignore_index=True,sort=False);assert len(df)==415,len(df)
+          out=Path('runs/paper_ablations_final');out.mkdir(parents=True,exist_ok=True);df.to_csv(out/'run_metrics.csv',index=False,encoding='utf-8-sig')
+          ss=list(Path('runs/ablation_inputs').rglob('summary_long.csv'));cs=list(Path('runs/ablation_inputs').rglob('paired_comparisons.csv'))
+          if ss: pd.concat([pd.read_csv(p,encoding='utf-8-sig') for p in ss],ignore_index=True,sort=False).to_csv(out/'summary_long.csv',index=False,encoding='utf-8-sig')
+          if cs: pd.concat([pd.read_csv(p,encoding='utf-8-sig') for p in cs],ignore_index=True,sort=False).to_csv(out/'paired_comparisons.csv',index=False,encoding='utf-8-sig')
+          (out/'completion.json').write_text(json.dumps({'expected_runs':415,'actual_runs':len(df),'scenario_shards':8},indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paper-cvfix-ablations-combined-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/paper_ablations_final
+          retention-days: 90
+
+  sensitivity-shard:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[paper-experiments-cvfix]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {id: visibility_risk, path: policy.research.planning.visibility_risk, values: "0.01 0.025 0.05 0.10 0.20", expected: 50}
+          - {id: horizon_s, path: policy.research.planning.horizon_s, values: "1.0 2.0 3.0 4.0 5.0", expected: 50}
+          - {id: replan_period_s, path: policy.research.planning.replan_period_s, values: "0.25 0.5 1.0", expected: 30}
+          - {id: settle_s, path: policy.research.execution.settle_s, values: "0.10 0.25 0.50", expected: 30}
+          - {id: detection_probability, path: policy.research.perception.detection_probability, values: "0.80 0.90 0.96 1.00", expected: 40}
+          - {id: position_noise_std_m, path: policy.research.perception.position_noise_std_m, values: "0.25 0.5 1.0 2.0 4.0", expected: 50}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - name: Install complete simulation runtime
+        run: |
+          python -m pip install numpy scipy pandas PyYAML matplotlib opencv-python-headless
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - name: Run frozen validation-panel sweep
+        working-directory: zr10_cooperative_lab
+        env:
+          ID: ${{ matrix.id }}
+          PATHKEY: ${{ matrix.path }}
+          VALUES: ${{ matrix.values }}
+          EXPECTED: ${{ matrix.expected }}
+        run: |
+          read -ra vals <<< "$VALUES"
+          python -m zr10lab.research.studies sensitivity --scenarios configs/research/scenarios/S4_boundary_handoff.yaml configs/research/scenarios/S8_maneuver.yaml --path "$PATHKEY" --values "${vals[@]}" --seeds 2001 2002 2003 2004 2005 --output "runs/paper_sensitivity/${ID}"
+          python - <<'PY'
+          import csv,os
+          from pathlib import Path
+          r=Path('runs/paper_sensitivity')/os.environ['ID'];e=int(os.environ['EXPECTED'])
+          idx=list(csv.DictReader((r/'index.csv').open(encoding='utf-8-sig',newline='')));m=list(csv.DictReader((r/'run_metrics.csv').open(encoding='utf-8-sig',newline='')))
+          assert len(idx)==e and len(m)==e,(len(idx),len(m),e);assert all(x['status']=='completed' for x in idx)
+          print(f'{os.environ["ID"]}: {e}/{e}')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paper-cvfix-sensitivity-${{ matrix.id }}-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/paper_sensitivity/${{ matrix.id }}
+          retention-days: 90
+          compression-level: 6
+
+  sensitivity-aggregate:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[paper-experiments-cvfix]') }}
+    needs: sensitivity-shard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: python -m pip install pandas
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: paper-cvfix-sensitivity-*-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/sensitivity_inputs
+          merge-multiple: false
+      - name: Merge 250 sensitivity runs
+        working-directory: zr10_cooperative_lab
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          tabs=list(Path('runs/sensitivity_inputs').rglob('run_metrics.csv'));assert len(tabs)==6,tabs
+          df=pd.concat([pd.read_csv(p,encoding='utf-8-sig') for p in tabs],ignore_index=True,sort=False);assert len(df)==250,len(df)
+          out=Path('runs/paper_sensitivity_final');out.mkdir(parents=True,exist_ok=True);df.to_csv(out/'run_metrics.csv',index=False,encoding='utf-8-sig')
+          ss=list(Path('runs/sensitivity_inputs').rglob('summary_long.csv'))
+          if ss:pd.concat([pd.read_csv(p,encoding='utf-8-sig') for p in ss],ignore_index=True,sort=False).to_csv(out/'summary_long.csv',index=False,encoding='utf-8-sig')
+          (out/'completion.json').write_text(json.dumps({'expected_runs':250,'actual_runs':len(df),'sweeps':6,'panel':['S4_boundary_handoff','S8_maneuver'],'seeds':[2001,2002,2003,2004,2005]},indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paper-cvfix-sensitivity-combined-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/paper_sensitivity_final
+          retention-days: 90
+
+  scalability:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[paper-experiments-cvfix]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - name: Install complete solver runtime
+        run: |
+          python -m pip install numpy scipy PyYAML opencv-python-headless
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - name: Run 24-point scalability grid
+        working-directory: zr10_cooperative_lab
+        run: |
+          mkdir -p runs/paper_scalability
+          python -m zr10lab.research.scalability --config configs/research/search_monitor_base.yaml --targets 0 1 2 3 4 5 6 8 --search-candidates 4 8 12 --repetitions 10 --output runs/paper_scalability/scalability.csv
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+          rows=list(csv.DictReader(Path('runs/paper_scalability/scalability.csv').open(encoding='utf-8-sig',newline='')));assert len(rows)==24,len(rows);assert all(int(r['repetitions'])==10 for r in rows)
+          print('scalability 24/24 complete')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paper-cvfix-scalability-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/paper_scalability
+          retention-days: 90
