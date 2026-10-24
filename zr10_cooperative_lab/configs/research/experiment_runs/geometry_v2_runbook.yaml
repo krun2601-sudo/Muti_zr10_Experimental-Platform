@@ -16,6 +16,8 @@ protocol_order:
     directory: configs/research/frozen_baselines_geometry_v2
     selected_methods: [weighted_rh, classical_ptz, info_planner, ssm_belief]
   - phase: heldout_main_and_ood
-    status: unlocked_not_started
+    status: main_requested
+    frozen_input_commit: 6906009dd4621b7582d8ff5d8eecd47c3786afc5
+    main_expected_runs: 560
   - phase: ablation_sensitivity_scalability
     status: pending
