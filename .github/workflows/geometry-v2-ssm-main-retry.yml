@@ -1,0 +1,250 @@
+name: geometry-v2-ssm-main-retry
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["research/ecp-rh-experiments"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  ssm-main-shard:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[geometry-v2-ssm-retry]') }}
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        include:
+          - scenario: S0
+            scenario_file: scenarios/S0_no_target.yaml
+            seed_block: a
+            seeds: "3001,3002,3003,3004,3005,3006,3007,3008,3009,3010"
+          - scenario: S0
+            scenario_file: scenarios/S0_no_target.yaml
+            seed_block: b
+            seeds: "3011,3012,3013,3014,3015,3016,3017,3018,3019,3020"
+          - scenario: S10
+            scenario_file: scenarios/S10_heldout_mixed.yaml
+            seed_block: a
+            seeds: "3001,3002,3003,3004,3005,3006,3007,3008,3009,3010"
+          - scenario: S10
+            scenario_file: scenarios/S10_heldout_mixed.yaml
+            seed_block: b
+            seeds: "3011,3012,3013,3014,3015,3016,3017,3018,3019,3020"
+          - scenario: S11
+            scenario_file: scenarios/S11_heldout_handoff_contention.yaml
+            seed_block: a
+            seeds: "3001,3002,3003,3004,3005,3006,3007,3008,3009,3010"
+          - scenario: S11
+            scenario_file: scenarios/S11_heldout_handoff_contention.yaml
+            seed_block: b
+            seeds: "3011,3012,3013,3014,3015,3016,3017,3018,3019,3020"
+          - scenario: S7
+            scenario_file: scenarios/S7_overload.yaml
+            seed_block: a
+            seeds: "3001,3002,3003,3004,3005,3006,3007,3008,3009,3010"
+          - scenario: S7
+            scenario_file: scenarios/S7_overload.yaml
+            seed_block: b
+            seeds: "3011,3012,3013,3014,3015,3016,3017,3018,3019,3020"
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: zr10_cooperative_lab/pyproject.toml
+      - name: Install frozen simulation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy scipy pandas PyYAML opencv-python-headless matplotlib gymnasium
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - name: Build a shard-only copy of the frozen manifest
+        working-directory: zr10_cooperative_lab
+        env:
+          SCENARIO_FILE: ${{ matrix.scenario_file }}
+          SEEDS: ${{ matrix.seeds }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import yaml
+
+          source = Path('configs/research/paper_experiment_manifest.yaml')
+          manifest = yaml.safe_load(source.read_text(encoding='utf-8-sig'))
+          manifest['splits']['test_main'] = {
+              'scenarios': [os.environ['SCENARIO_FILE']],
+              'seeds': [int(value) for value in os.environ['SEEDS'].split(',')],
+          }
+          target = source.with_name('paper_experiment_manifest_ssm_retry.yaml')
+          target.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding='utf-8')
+          print(target)
+          PY
+      - name: Run one immutable SSM-Belief shard
+        working-directory: zr10_cooperative_lab
+        run: |
+          python -m zr10lab.research.protocol \
+            --manifest configs/research/paper_experiment_manifest_ssm_retry.yaml \
+            --split test_main \
+            --methods ssm_belief \
+            --output runs/ssm_main_retry \
+            --baseline-selections configs/research/frozen_baselines_geometry_v2 \
+            --no-paired
+      - name: Audit ten-run shard
+        working-directory: zr10_cooperative_lab
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('runs/ssm_main_retry/test_main')
+          status = json.loads((root / 'batch_status.json').read_text())
+          assert status['attempted'] == 10, status
+          assert status['completed'] == 10, status
+          assert status['failed'] == 0, status
+          print(json.dumps(status, indent=2))
+          PY
+      - name: Upload complete retry shard
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: geometry-v2-ssm-retry-${{ matrix.scenario }}-${{ matrix.seed_block }}-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/ssm_main_retry/test_main
+          retention-days: 90
+          compression-level: 6
+
+  aggregate-main:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[geometry-v2-ssm-retry]') }}
+    needs: ssm-main-shard
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install analysis dependencies
+        run: |
+          python -m pip install numpy scipy pandas PyYAML matplotlib
+          python -m pip install -e ./zr10_cooperative_lab --no-deps
+      - name: Download the six completed original method shards
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 40108890844
+          pattern: paper-test-main-*-7cb5a65bba83ad419b6b2ffb51fc5335c68ef967
+          path: zr10_cooperative_lab/runs/original_main_shards
+          merge-multiple: false
+      - name: Download all eight SSM retry shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: geometry-v2-ssm-retry-*-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/ssm_retry_shards
+          merge-multiple: false
+      - name: Merge and audit exactly 560 frozen held-out runs
+        working-directory: zr10_cooperative_lab
+        run: |
+          python - <<'PY'
+          import csv
+          import json
+          import math
+          from pathlib import Path
+          import numpy as np
+          import pandas as pd
+          import yaml
+
+          original = Path('runs/original_main_shards')
+          retry = Path('runs/ssm_retry_shards')
+          original_tables = [
+              path for path in original.rglob('run_metrics.csv')
+              if 'paper-test-main-ssm_belief-' not in str(path)
+          ]
+          retry_tables = list(retry.rglob('run_metrics.csv'))
+          assert len(original_tables) == 6, [str(path) for path in original_tables]
+          assert len(retry_tables) == 8, [str(path) for path in retry_tables]
+
+          original_frames = [pd.read_csv(path, encoding='utf-8-sig') for path in original_tables]
+          retry_frames = [pd.read_csv(path, encoding='utf-8-sig') for path in retry_tables]
+          assert all(len(frame) == 80 for frame in original_frames)
+          assert all(len(frame) == 10 for frame in retry_frames)
+          df = pd.concat(original_frames + retry_frames, ignore_index=True, sort=False)
+
+          methods = ['fixed_scan', 'greedy', 'weighted_rh', 'classical_ptz', 'info_planner', 'ssm_belief', 'ecprh']
+          counts = df.groupby('method').size().to_dict()
+          assert len(df) == 560, len(df)
+          assert counts == {method: 80 for method in methods}, counts
+          assert set(df['status']) == {'completed'}, set(df['status'])
+          assert not df[['scenario', 'seed', 'method']].astype(str).duplicated().any()
+
+          canonical = yaml.safe_load(Path('configs/research/paper_experiment_manifest.yaml').read_text(encoding='utf-8-sig'))
+          expected_seeds = {int(value) for value in canonical['splits']['test_main']['seeds']}
+          expected_scenarios = set()
+          for relative in canonical['splits']['test_main']['scenarios']:
+              scenario = yaml.safe_load((Path('configs/research') / relative).read_text(encoding='utf-8-sig'))
+              expected_scenarios.add(str(scenario['policy']['research']['scenario']['id']))
+          assert set(df['scenario'].astype(str)) == expected_scenarios
+          assert {int(value) for value in df['seed']} == expected_seeds
+
+          out = Path('runs/paper_test_main_combined_retry')
+          out.mkdir(parents=True, exist_ok=True)
+          df.to_csv(out / 'run_metrics.csv', index=False, encoding='utf-8-sig')
+
+          metadata = {'scenario', 'method', 'seed', 'run_dir', 'status', 'config', 'error'}
+          rows = []
+          for (scenario, method), group in df.groupby(['scenario', 'method'], sort=True):
+              for key in df.columns:
+                  if key in metadata:
+                      continue
+                  values = pd.to_numeric(group[key], errors='coerce').to_numpy(dtype=float)
+                  values = values[np.isfinite(values)]
+                  if not len(values):
+                      continue
+                  mean = float(values.mean())
+                  std = float(values.std(ddof=1)) if len(values) > 1 else 0.0
+                  ci = 1.96 * std / math.sqrt(len(values)) if len(values) > 1 else 0.0
+                  rows.append({
+                      'scenario': scenario, 'method': method, 'metric': key,
+                      'n': len(values), 'mean': mean, 'std': std,
+                      'ci95_low': mean - ci, 'ci95_high': mean + ci,
+                      'min': float(values.min()), 'max': float(values.max()),
+                  })
+          fields = sorted({key for row in rows for key in row})
+          with (out / 'summary_long.csv').open('w', encoding='utf-8-sig', newline='') as handle:
+              writer = csv.DictWriter(handle, fieldnames=fields)
+              writer.writeheader()
+              writer.writerows(rows)
+          (out / 'combined_status.json').write_text(json.dumps({
+              'expected_runs': 560,
+              'actual_runs': len(df),
+              'methods': methods,
+              'runs_per_method': counts,
+              'original_workflow_run_id': 40108890844,
+              'original_data_commit': '7cb5a65bba83ad419b6b2ffb51fc5335c68ef967',
+              'ssm_retry_data_commit': '${{ github.sha }}',
+              'ssm_retry_shards': 8,
+          }, indent=2), encoding='utf-8')
+          PY
+          python -m zr10lab.research.statistics \
+            runs/paper_test_main_combined_retry/run_metrics.csv \
+            --reference ecprh \
+            --bootstrap 10000 \
+            --output runs/paper_test_main_combined_retry/paired_comparisons.csv
+          python -m zr10lab.research.result_audit \
+            runs/paper_test_main_combined_retry/run_metrics.csv \
+            runs/paper_test_main_combined_retry/paired_comparisons.csv \
+            --manifest configs/research/paper_experiment_manifest.yaml \
+            --output runs/paper_test_main_combined_retry/integrity_audit.json
+          python -m zr10lab.research.plots batch \
+            runs/paper_test_main_combined_retry \
+            --output runs/paper_test_main_combined_retry/figures
+      - name: Upload final retry-backed main result
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-test-main-combined-retry-${{ github.sha }}
+          path: zr10_cooperative_lab/runs/paper_test_main_combined_retry
+          retention-days: 90
+          compression-level: 6
