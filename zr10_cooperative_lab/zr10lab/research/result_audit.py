@@ -21,8 +21,23 @@ def _finite(value) -> bool:
         return False
 
 
-def _scenario_id(config_path: str) -> str:
-    return Path(config_path).stem
+def _scenario_id(config_path: str, manifest_path: str | Path) -> str:
+    """Return the scenario id recorded by the frozen scenario config.
+
+    File stems such as ``S0_no_target`` are configuration filenames, not runtime
+    scenario identifiers (the latter may be ``S0-no-target``).  The audit must
+    therefore validate against the explicit id stored in the scenario YAML rather
+    than infer an identity from a filename.
+    """
+    path = (Path(manifest_path).resolve().parent / config_path).resolve()
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    try:
+        scenario_id = data["policy"]["research"]["scenario"]["id"]
+    except (KeyError, TypeError):
+        scenario_id = None
+    if scenario_id is None:
+        raise AssertionError(f"frozen scenario config {path} has no explicit policy.research.scenario.id")
+    return str(scenario_id)
 
 
 def audit_main_test(
@@ -37,11 +52,12 @@ def audit_main_test(
     their reported ``n_pairs`` must instead equal the number of finite pairs that
     actually exists in ``run_metrics.csv``.
     """
-    manifest = yaml.safe_load(Path(manifest_path).read_text(encoding="utf-8"))
+    manifest_path = Path(manifest_path)
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
     methods = [str(x) for x in manifest["methods"]["primary"]]
     reference = str(manifest["statistics"]["reference_method"])
     split = manifest["splits"]["test_main"]
-    scenarios = [_scenario_id(x) for x in split["scenarios"]]
+    scenarios = [_scenario_id(x, manifest_path) for x in split["scenarios"]]
     seeds = [str(x) for x in split["seeds"]]
     primary = [str(x["name"]) for x in manifest["metrics"]["primary"]]
 
