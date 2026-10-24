@@ -35,23 +35,34 @@ def _number(value):
     return value if math.isfinite(value) else None
 
 
-def _mean_ci(values):
+def _mean_ci(values, *, resamples: int = 10000, seed: int = 20261024):
+    """Return mean and a deterministic percentile-bootstrap 95% CI.
+
+    Ablation inputs are paired differences before reaching this function, so the
+    interval is a paired bootstrap over scenario/seed cases. Sensitivity panels use
+    the same reproducible bootstrap for descriptive mean intervals. No experiment
+    outputs are changed; this function only affects visualization uncertainty bands.
+    """
     a = np.asarray([v for v in values if v is not None and math.isfinite(float(v))], dtype=float)
     if not len(a):
         return None
     mean = float(a.mean())
-    std = float(a.std(ddof=1)) if len(a) > 1 else 0.0
-    ci = 1.96 * std / math.sqrt(len(a)) if len(a) > 1 else 0.0
-    return mean, mean-ci, mean+ci, len(a)
+    if len(a) == 1:
+        return mean, mean, mean, 1
+    rng = np.random.default_rng(int(seed))
+    draws = rng.choice(a, size=(max(1, int(resamples)), len(a)), replace=True).mean(axis=1)
+    low, high = np.percentile(draws, [2.5, 97.5])
+    return mean, float(low), float(high), len(a)
 
 
 def ablation_figures(root: str | Path, output: str | Path | None = None):
     """Create per-scenario relative-degradation figures from paired ablation runs.
 
     Positive degradation means the ablated model is worse than ``ecprh[full]`` for
-    every primary metric (all primary metrics are minimized).  No cross-scenario
+    every primary metric (all primary metrics are minimized). No cross-scenario
     averaging is used because each ablation is tied to a predeclared mechanism and
-    scenario family.
+    scenario family. Error bars are percentile-bootstrap intervals over paired
+    scenario/seed differences.
     """
     root = Path(root).resolve()
     output = Path(output or root / "figures").resolve(); output.mkdir(parents=True, exist_ok=True)
@@ -83,7 +94,8 @@ def ablation_figures(root: str | Path, output: str | Path | None = None):
                 if stats is None: continue
                 mean,low,high,n=stats
                 figure_rows.append({"scenario":scenario,"metric":metric,"variant":variant,
-                                    "mean_degradation":mean,"ci95_low":low,"ci95_high":high,"n_pairs":n})
+                                    "mean_degradation":mean,"ci95_low":low,"ci95_high":high,"n_pairs":n,
+                                    "ci_method":"paired_percentile_bootstrap_10000"})
             if not figure_rows: continue
             x=np.arange(len(figure_rows)); y=np.asarray([r["mean_degradation"] for r in figure_rows])
             lo=np.asarray([max(0.0,r["mean_degradation"]-r["ci95_low"]) for r in figure_rows])
@@ -110,7 +122,7 @@ def _parse_sensitivity_method(method: str):
 
 
 def sensitivity_figures(root: str | Path, output: str | Path | None = None):
-    """Plot sensitivity means/95% normal CIs from the saved S4/S8 panel only."""
+    """Plot sensitivity means with reproducible bootstrap 95% intervals."""
     root=Path(root).resolve(); output=Path(output or root/"figures").resolve();output.mkdir(parents=True,exist_ok=True)
     rows=_read(root/"run_metrics.csv")
     if not rows: raise ValueError(f"run_metrics.csv missing under {root}")
@@ -135,7 +147,8 @@ def sensitivity_figures(root: str | Path, output: str | Path | None = None):
                     if stats is None: continue
                     mean,low,high,n=stats;xs.append(value);means.append(mean);lows.append(low);highs.append(high)
                     figure_rows.append({"parameter":path,"value":value,"scenario":scenario,"metric":metric,
-                                        "mean":mean,"ci95_low":low,"ci95_high":high,"n":n})
+                                        "mean":mean,"ci95_low":low,"ci95_high":high,"n":n,
+                                        "ci_method":"percentile_bootstrap_10000"})
                 if xs:
                     has=True
                     y=np.asarray(means); lo=np.maximum(0,y-np.asarray(lows)); hi=np.maximum(0,np.asarray(highs)-y)
@@ -150,13 +163,22 @@ def sensitivity_figures(root: str | Path, output: str | Path | None = None):
 
 
 def scalability_figures(csv_path: str | Path, output: str | Path | None = None):
+    """Generate scalability figures strictly from the frozen benchmark CSV.
+
+    Candidate generation and MILP solution times are plotted separately because the
+    frozen benchmark shows that geometry/candidate construction, not HiGHS, becomes
+    the dominant high-target-count bottleneck.
+    """
     csv_path=Path(csv_path).resolve(); output=Path(output or csv_path.parent/"figures").resolve();output.mkdir(parents=True,exist_ok=True)
     rows=_read(csv_path)
     if not rows: raise ValueError(f"empty scalability table: {csv_path}")
     generated=[]
-    definitions=[("solve_ms_p95","Solver time P95 / ms"),
-                 ("candidate_count_mean","Mean candidate count"),
-                 ("priority_certification_rate","Priority certification rate")]
+    definitions=[
+        ("generation_ms_p95","Candidate generation P95 / ms"),
+        ("solve_ms_p95","MILP solve P95 / ms"),
+        ("candidate_count","Candidate count"),
+        ("priority_certification_rate","Priority certification rate"),
+    ]
     candidate_levels=sorted({int(float(r["search_candidates_per_device"])) for r in rows})
     for key,ylabel in definitions:
         fig,ax=plt.subplots(figsize=(6.4,4.2));source=[];has=False
