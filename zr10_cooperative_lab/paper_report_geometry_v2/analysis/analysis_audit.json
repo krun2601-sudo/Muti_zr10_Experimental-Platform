@@ -1,0 +1,73 @@
+{
+  "main": {
+    "rows": 560,
+    "completed": 560,
+    "duplicates": 0,
+    "scenario_counts": {
+      "S0-no-target": 140,
+      "S10-heldout-mixed": 140,
+      "S11-heldout-handoff-contention": 140,
+      "S7-overload": 140
+    }
+  },
+  "ood": {
+    "rows": 280,
+    "completed": 280,
+    "duplicates": 0,
+    "scenario_counts": {
+      "S9a-ood-fast-targets": 140,
+      "S9b-ood-delay-noise": 140
+    }
+  },
+  "ablations": {
+    "rows": 415,
+    "completed": 415,
+    "duplicates": 0,
+    "scenario_counts": {
+      "S11-heldout-handoff-contention": 60,
+      "S2-staggered": 60,
+      "S4-boundary-handoff": 25,
+      "S5-cluster-split": 60,
+      "S6-contention": 80,
+      "S8-maneuver": 10,
+      "S9a-ood-fast-targets": 60,
+      "S9b-ood-delay-noise": 60
+    }
+  },
+  "sensitivity": {
+    "rows": 250,
+    "completed": 250,
+    "duplicates": 0,
+    "scenario_counts": {
+      "S4-boundary-handoff": 125,
+      "S8-maneuver": 125
+    }
+  },
+  "scalability": {
+    "points": 24,
+    "repetitions_each": 10,
+    "duplicate_points": 0
+  },
+  "source_sha256": {
+    "main/run_metrics.csv": "08802e0cd5608b51f6e04b558fbcd9234dc39e05408ce8a79bb8f273cc413530",
+    "main/paired_comparisons.csv": "a4562294ba95cd39103866946f516f02ac9d59eb1913af46efd84d37d276609c",
+    "ood/run_metrics.csv": "8540d32ba223c24de2d415f0e0f433a4c777d4bb1ecedf8ec8176aadd88117bd",
+    "ood/paired_comparisons.csv": "581627448e4e7cb5c5537ffe749f6eab7d50014221f5649c6494b9adb49fc28e",
+    "ablations/run_metrics.csv": "e5b10730cdc18f5dd7ad44863c8db50bf578f565a13378589bb95aee5936b37a",
+    "ablations/paired_comparisons.csv": "eac751e179cbc5afa3e212209a90a69498cb7b625b5800a008e62dd5e79f396c",
+    "sensitivity/run_metrics.csv": "cc22e177c82e3ccca186c1fc0754d572415d7ac7eb42d15713793d2595e870d6"
+  },
+  "software": {
+    "python": "3.12.14",
+    "numpy": "2.5.4",
+    "pandas": "3.0.1",
+    "matplotlib": "3.11.2"
+  },
+  "notes": [
+    "All five primary metrics are minimized.",
+    "New descriptive CIs use 10000 percentile bootstrap resamples, seed 20261025; published paired statistics are copied, not recomputed.",
+    "Paired statistics Holm families are metric-by-scenario/scope, not all outcomes jointly.",
+    "Ablation overall rows are shard-local; use scenario rows.",
+    "Timing totals use sums of means only; sums of marginal P95s are not presented as joint P95."
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "source_commit": "94b30f4d100532779d2d25158b8a2e2fd607e05f",
+  "report_pages": 22,
+  "source_tracked_files": 823,
+  "original_result_files": 96,
+  "raw_artifact_count": 53,
+  "raw_archive_bytes": 1196122554,
+  "derived_tables": 14,
+  "derived_figures": 7,
+  "analysis_reproduction": "14 of 14 CSV files byte-identical in an independent package-path run",
+  "visual_qa": "All 22 pages inspected; changed pages re-inspected after fixes",
+  "changes": "Report and derived analysis only; no algorithm, config, or frozen result modifications",
+  "original_run_ids": {
+    "main": 40108890844,
+    "supporting": 40109750526,
+    "validation": [
+      40097586890,
+      40106592387
+    ]
+  },
+  "release_tag": "geometry-v2-complete-report-20261025",
+  "exact_source_extraction": "Git blob bytes without checkout transformations",
+  "original_experiment_hashes_verified": 13
+}
